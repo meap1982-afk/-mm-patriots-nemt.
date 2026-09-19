@@ -1,0 +1,9 @@
+{
+  "name": "M&M Patriots NEMT",
+  "short_name": "M&M NEMT",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#07143c",
+  "theme_color": "#07143c",
+  "description": "M&M Patriots NEMT dispatch and driver prototype"
+}
