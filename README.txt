@@ -1,4 +1,4 @@
-M&M Patriots NEMT — Functional Prototype
+M&M Patriots NEMT — Shared Beta
 
 Open index.html in a browser to test.
 Features included:
@@ -15,10 +15,12 @@ Features included:
 - Patient amount due, visible to the assigned driver when payment is required
 - Mandatory sequential driver workflow:
   Accept Trip -> Arrived at Pickup -> Patient Picked Up -> Arrived at Destination -> Completed
-- Local device storage for prototype data
+- Shared PostgreSQL trip storage
+- Server-side access codes and short-lived sessions
+- Automatic refresh between Dispatch and Driver devices
 
-Production deployment still requires secure authentication, a cloud database/API, real GPS permissions,
-push notifications, HIPAA/security review, and App Store/Google Play packaging.
+Before real patient use, complete a HIPAA/security review, individual user accounts, audit logging,
+real GPS permissions, push notifications, backups, retention rules, and a signed BAA with vendors.
 
 - Driver PAYMENT COLLECTED confirmation with amount, driver name, date/time, and Dispatch visibility
 

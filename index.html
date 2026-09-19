@@ -21,6 +21,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
 .step{padding:10px 12px;border-radius:10px;background:#eef2f7;margin:7px 0;font-weight:700}.step.done{background:#e8f7ee;color:#0b7c3b}.step.current{background:#eaf1ff;color:#115ecb}
 .hidden{display:none!important}.login{min-height:100vh;background:linear-gradient(#07143c,#0c2054);display:grid;place-items:center;padding:22px}.loginbox{width:min(430px,100%);text-align:center;color:white}.loginbox img{width:85%;max-height:260px;object-fit:contain}.loginbox button{width:100%;margin:8px 0;padding:16px;font-size:17px}
 .small{font-size:12px;color:var(--muted)} .topline{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.loginbox input,.loginbox select{margin:6px 0;color:var(--ink)}.sync{font-size:12px;padding:5px 9px;border-radius:999px;background:#fff3cd;color:#785b00}.sync.online{background:#e8f7ee;color:#0b7c3b}.sync.offline{background:#ffe8eb;color:#bd1728}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}.kpi{background:white;border-radius:12px;padding:12px;text-align:center;border:1px solid var(--line)}.kpi b{display:block;font-size:22px}
 @media(max-width:650px){.kpis{grid-template-columns:repeat(2,1fr)}.wrap{padding:10px}header{padding-top:max(12px,env(safe-area-inset-top))}}
 </style>
@@ -30,14 +31,16 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
  <div class="loginbox">
   <img src="logo.jpeg" alt="M&M Patriots logo">
   <h1>M&M Patriots NEMT</h1><p>People First · Safe Rides · Reliable Service</p>
+  <input id="accessCode" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Access code">
+  <select id="loginDriver" aria-label="Driver"></select>
   <button class="primary" onclick="enter('dispatch')">Dispatch Login</button>
   <button class="danger" onclick="enter('driver')">Driver Login</button>
-  <p style="opacity:.75;font-size:12px">Functional prototype — data is stored on this device.</p>
+  <p id="loginMessage" style="opacity:.85;font-size:12px">Shared beta — sign in to continue.</p>
  </div>
 </section>
 
 <div id="app" class="hidden">
-<header><img src="logo.jpeg"><div><b id="roleTitle">Dispatch</b><div style="font-size:12px;opacity:.8">Non Emergency Medical Transportation</div></div></header>
+<header><img src="logo.jpeg"><div style="flex:1"><b id="roleTitle">Dispatch</b><div style="font-size:12px;opacity:.8">Non Emergency Medical Transportation</div></div><span id="syncStatus" class="sync">Connecting…</span></header>
 <div class="wrap">
  <div class="tabs">
   <button id="dispatchTab" class="ghost" onclick="showDispatch()">Dispatch</button>
@@ -49,9 +52,9 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
   <div class="card">
    <div class="topline"><h2 style="margin:0">Create Trip</h2><span class="badge rt">One Way / R/T</span></div>
    <div class="row">
-    <div class="grow"><label>Patient *</label><input id="patient" value="John Smith"></div>
-    <div class="grow"><label>Phone Number *</label><input id="phone" value="703-555-1234"></div>
-    <div class="grow"><label>Patient Weight (lbs) *</label><input id="weight" type="number" min="1" step="1" value="180"></div>
+    <div class="grow"><label>Patient *</label><input id="patient" autocomplete="off" placeholder="Patient name"></div>
+    <div class="grow"><label>Phone Number *</label><input id="phone" type="tel" autocomplete="off" placeholder="Phone number"></div>
+    <div class="grow"><label>Patient Weight (lbs) *</label><input id="weight" type="number" min="1" step="1" placeholder="Weight"></div>
     <div class="grow"><label>Trip Type *</label><select id="tripType"><option>Ambulatory</option><option selected>Wheelchair</option><option>Stretcher</option></select></div>
     <div class="grow"><label>Round Trip?</label><select id="isRT"><option value="yes">R/T — Trip A + Trip B</option><option value="no">One Way — Trip A only</option></select></div>
     <div class="grow"><label>Two-Men Team</label><select id="twoMen"><option>No</option><option>Yes</option></select></div>
@@ -62,11 +65,11 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    <div class="row">
     <div class="grow"><label>Pickup Time *</label><input id="aTime" type="time" value="08:30"></div>
     <div class="grow"><label>Pickup Location Type</label><select id="aPickType"><option>Home</option><option>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
-    <div class="grow"><label>Pickup Address *</label><input id="aPick" value="123 Main St, Manassas, VA"></div>
+    <div class="grow"><label>Pickup Address *</label><input id="aPick" autocomplete="off" placeholder="Pickup address"></div>
     <div class="grow"><label>Suite # / Room #</label><input id="aPickRoom" placeholder="Optional"></div>
     <div class="grow"><label>Drop-off Location Type</label><select id="aDropType"><option>Home</option><option selected>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
-    <div class="grow"><label>Drop-off Address *</label><input id="aDrop" value="Inova Fairfax Hospital, Falls Church, VA"></div>
-    <div class="grow"><label>Suite # / Room #</label><input id="aDropRoom" value="Room 204"></div>
+    <div class="grow"><label>Drop-off Address *</label><input id="aDrop" autocomplete="off" placeholder="Drop-off address"></div>
+    <div class="grow"><label>Suite # / Room #</label><input id="aDropRoom" placeholder="Optional"></div>
     <div class="grow"><label>Driver</label><select id="aDriver"><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
    <div id="returnFields">
@@ -91,12 +94,12 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
  </section>
 
  <section id="driver" class="hidden">
-  <div class="card"><div class="topline"><div><h2 style="margin:0">My Trips</h2><div class="small">Driver: Carlos R. (demo)</div></div><span class="badge">Today</span></div></div>
+  <div class="card"><div class="topline"><div><h2 style="margin:0">My Trips</h2><div id="driverName" class="small">Driver</div></div><button class="ghost" onclick="logout()">Log Out</button></div></div>
   <div id="driverTrips"></div>
  </section>
 </div></div>
 
-<script>
+<script type="text/plain" id="legacyScript">
 const steps=["Assigned","Accepted","Arrived at Pickup","Patient Picked Up","Arrived at Destination","Completed"];
 let trips=JSON.parse(localStorage.getItem("mmTrips")||"[]");
 function save(){localStorage.setItem("mmTrips",JSON.stringify(trips));render();}
@@ -162,4 +165,5 @@ function render(){
 }
 render();
 </script>
+<script src="app.js"></script>
 </body></html>
