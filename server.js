@@ -60,8 +60,9 @@ function normalizeTrip(input) {
   const status = Math.max(0, Math.min(5, Number(input.status || 0)));
   const patientFirstName = cleanString(input.patientFirstName, 75);
   const patientLastName = cleanString(input.patientLastName, 75);
-  const payerType = input.payerType === "Patient" ? "Patient" : input.payerType === "Other" ? "Other" : "";
-  const paymentByPhone = input.paymentByPhone === "Yes" ? "Yes" : input.paymentByPhone === "No" ? "No" : "";
+  const payerType = input.payerType === "Patient" ? "Patient" : input.payerType === "Other" ? "Other" : input.payerType === "NoPay" ? "NoPay" : "";
+  const patientPays = payerType === "NoPay" ? "No" : cleanString(input.patientPays, 5);
+  const paymentByPhone = payerType === "NoPay" ? "" : input.paymentByPhone === "Yes" ? "Yes" : input.paymentByPhone === "No" ? "No" : "";
   return {
     id: cleanString(input.id, 80), group: cleanString(input.group, 80), leg: cleanString(input.leg, 1),
     label: cleanString(input.label, 60),
@@ -79,15 +80,15 @@ function normalizeTrip(input) {
     paymentSource: cleanString(input.paymentSource, 30),
 collection: cleanString(input.collection, 20),
 paymentMethod: cleanString(input.paymentMethod, 20),
-patientAmount: Math.max(0, Number(input.patientAmount || 0)),
-paymentCollected: Boolean(input.paymentCollected),
+patientAmount: payerType === "NoPay" ? 0 : Math.max(0, Number(input.patientAmount || 0)),
+paymentCollected: payerType === "NoPay" ? false : Boolean(input.paymentCollected),
 payment: cleanString(input.payment, 80),
 payStatus: cleanString(input.payStatus, 30),
-patientPays: cleanString(input.patientPays, 5),
+patientPays,
 payerType,
-payerFirstName: input.patientPays === "Yes" && payerType === "Patient" ? patientFirstName : cleanString(input.payerFirstName, 75),
-payerLastName: input.patientPays === "Yes" && payerType === "Patient" ? patientLastName : cleanString(input.payerLastName, 75),
-payerRelationship: input.patientPays === "Yes" && payerType === "Patient" ? "Self" : cleanString(input.payerRelationship, 80),
+payerFirstName: payerType === "NoPay" ? "" : patientPays === "Yes" && payerType === "Patient" ? patientFirstName : cleanString(input.payerFirstName, 75),
+payerLastName: payerType === "NoPay" ? "" : patientPays === "Yes" && payerType === "Patient" ? patientLastName : cleanString(input.payerLastName, 75),
+payerRelationship: payerType === "NoPay" ? "" : patientPays === "Yes" && payerType === "Patient" ? "Self" : cleanString(input.payerRelationship, 80),
 paymentByPhone,
 collectedBy: cleanString(input.collectedBy, 100),
 collectedAt: cleanString(input.collectedAt, 100),
