@@ -18,6 +18,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
 .tabs{display:flex;gap:8px;margin-bottom:14px}.tabs button{flex:1}.active{background:var(--blue)!important;color:white!important}
 .badge{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800;background:#eaf1ff;color:#1458c5}.rt{background:#ffe8eb;color:#bd1728}.trip{border-left:5px solid var(--blue)}
 .trip.return{border-left-color:var(--red)}.trip h3{margin:0 0 6px}.meta{color:var(--muted);font-size:14px;line-height:1.5}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.actions button{flex:1;min-width:145px}
+.actions .call-patient{display:flex;align-items:center;justify-content:center;flex:1;min-width:145px;padding:12px 14px;border-radius:11px;font-weight:800;font-size:14px;text-decoration:none}
 .meta a{color:#115ecb;text-decoration:underline;text-underline-offset:2px;font-weight:700}.address-heading{margin:16px 0 4px;font-size:15px}.address-fields .grow{min-width:135px}.address-fields .street{min-width:210px}
 .step{padding:10px 12px;border-radius:10px;background:#eef2f7;margin:7px 0;font-weight:700}.step.done{background:#e8f7ee;color:#0b7c3b}.step.current{background:#eaf1ff;color:#115ecb}
 .hidden{display:none!important}.login{min-height:100vh;background:linear-gradient(#07143c,#0c2054);display:grid;place-items:center;padding:22px}.loginbox{width:min(430px,100%);text-align:center;color:white}.loginbox img{width:85%;max-height:260px;object-fit:contain}.loginbox button{width:100%;margin:8px 0;padding:16px;font-size:17px}
@@ -58,6 +59,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Phone Number *</label><input id="phone" type="tel" autocomplete="off" placeholder="Phone number"></div>
     <div class="grow"><label>Patient Weight (lbs) *</label><input id="weight" type="number" min="1" step="1" placeholder="Weight"></div>
     <div class="grow"><label>Trip Type *</label><select id="tripType"><option>Ambulatory</option><option selected>Wheelchair</option><option>Stretcher</option></select></div>
+    <div class="grow"><label>Need Wheelchair?</label><select id="needsWheelchair"><option>Yes</option><option>No</option></select></div>
+    <div class="grow"><label>Need Oxygen?</label><select id="needsOxygen"><option>No</option><option>Yes</option></select></div>
     <div class="grow"><label>Trip Service</label><select id="isRT"><option value="yes">R/T</option><option value="no">One Way</option></select></div>
     <div class="grow"><label>Two-Men Team</label><select id="twoMen"><option>No</option><option>Yes</option></select></div>
     <div class="grow"><label>Does Patient Need Helper?</label><select id="needsHelper"><option value="No">No</option><option value="Yes">Yes</option></select></div>
