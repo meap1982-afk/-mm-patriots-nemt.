@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDisplayName</key><string>Dispatch</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Dispatch needs your location during your shift so the dispatcher can see your current position.</string>
+  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+  <string>Dispatch needs your location during your shift even when your iPhone is locked or the app is in the background. Tracking stops when you check out.</string>
+  <key>UIBackgroundModes</key><array><string>location</string></array>
+</dict>
+</plist>
