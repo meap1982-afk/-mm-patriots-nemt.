@@ -126,8 +126,8 @@ async function createTrip() {
   const stairsCount = hasStairs === "Yes" ? Number($("stairsCount").value) : 0;
   if (hasStairs === "Yes" && (!Number.isInteger(stairsCount) || stairsCount < 1 || stairsCount > 999))
     return alert("Enter the number of steps (1–999) when Has Stairs is Yes.");
-  const patientPays = $("patientPays").value;
-  const payerType = patientPays === "Yes" ? $("payerType").value : "";
+  const payerType = $("payerType").value;
+  const patientPays = payerType === "NoPay" ? "No" : "Yes";
   const paymentByPhone = patientPays === "Yes" ? $("paymentByPhone").value : "";
   const payerFirstName = patientPays !== "Yes" ? "" : payerType === "Other" ? $("payerFirstName").value.trim() : firstName;
   const payerLastName = patientPays !== "Yes" ? "" : payerType === "Other" ? $("payerLastName").value.trim() : lastName;
@@ -144,9 +144,9 @@ async function createTrip() {
     helperDriver: $("needsHelper").value === "Yes" ? $("helperDriver").value : "",
     payment: $("payment").value, payStatus: $("payStatus").value, patientPays,
     payerType, payerFirstName, payerLastName, payerRelationship, paymentByPhone,
-    patientAmount: Number($("patientAmount").value || 0), paymentCollected: $("patientPays").value === "Yes" && $("payStatus").value === "Paid",
-    collectedBy: $("patientPays").value === "Yes" && $("payStatus").value === "Paid" ? "Dispatch" : "",
-    collectedAt: $("patientPays").value === "Yes" && $("payStatus").value === "Paid" ? new Date().toISOString() : "",
+    patientAmount: patientPays === "Yes" ? Number($("patientAmount").value || 0) : 0, paymentCollected: patientPays === "Yes" && $("payStatus").value === "Paid",
+    collectedBy: patientPays === "Yes" && $("payStatus").value === "Paid" ? "Dispatch" : "",
+    collectedAt: patientPays === "Yes" && $("payStatus").value === "Paid" ? new Date().toISOString() : "",
     auth: $("auth").value, notes: $("notes").value, created: now
   };
   const group = `${$("isRT").value === "yes" ? "RT" : "OW"}-${now}`;
@@ -203,7 +203,7 @@ function tripCard(t, mode) {
     <div class="step ${t.hasCompanion === "Yes" ? "current" : ""}">Companion: <b>${companion}</b></div>
     ${t.needsHelper === "Yes" ? `<div class="meta">🧑‍🤝‍🧑 <b>Helper Driver:</b> ${esc(t.helperDriver || "Unassigned")}</div>` : ""}
     <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Private Payment Due: $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Private Payment Due: NO"}</div>
-    ${t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
+    ${t.payerType === "NoPay" ? `<div class="step">No Pay</div>` : t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
     ${mode === "driver" && dialLink ? `<div class="actions"><a class="ghost call-patient" href="${esc(dialLink)}" aria-label="Call ${esc(t.patient || "patient")}">📞 CALL PATIENT</a></div>` : ""}
     ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')">RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
@@ -247,11 +247,12 @@ $("isRT").addEventListener("change", updateTripService);
 updateTripService();
 $("needsHelper").addEventListener("change", () => $("helperDriverWrap").classList.toggle("hidden", $("needsHelper").value !== "Yes"));
 function updatePayerFields() {
-  const patientPays = $("patientPays").value === "Yes";
-  $("payerFields").classList.toggle("hidden", !patientPays);
-  $("payerNameFields").classList.toggle("hidden", !patientPays || $("payerType").value !== "Other");
+  const noPay = $("payerType").value === "NoPay";
+  $("patientPays").value = noPay ? "No" : "Yes";
+  $("patientAmountWrap").classList.toggle("hidden", noPay);
+  $("paymentByPhoneWrap").classList.toggle("hidden", noPay);
+  $("payerNameFields").classList.toggle("hidden", $("payerType").value !== "Other");
 }
-$("patientPays").addEventListener("change", updatePayerFields);
 $("payerType").addEventListener("change", updatePayerFields);
 updatePayerFields();
 $("hasStairs").addEventListener("change", () => $("stairsCountWrap").classList.toggle("hidden", $("hasStairs").value !== "Yes"));
