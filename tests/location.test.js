@@ -33,10 +33,11 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal(health.status, 200);
     assert.equal(health.data.version, 'driver-location-v1');
     const dispatch = (await request('/login', null, 'POST', { role: 'dispatch', code: 'dispatch-test' })).data.token;
-    const tripInput = { id: 'pickup-time-test', tripDate: '2026-09-26', patient: 'Test Patient', pickup: { address: 'Test pickup' }, dropoff: { address: 'Test dropoff' }, timeType: 'Scheduled', time: '09:15' };
+    const tripInput = { dispatchNotes: 'Private creation note', id: 'pickup-time-test', tripDate: '2026-09-26', patient: 'Test Patient', pickup: { address: 'Test pickup' }, dropoff: { address: 'Test dropoff' }, timeType: 'Scheduled', time: '09:15' };
     let saved = await request('/trips', dispatch, 'POST', { trips: [tripInput] });
     assert.equal(saved.status, 201);
     assert.equal(saved.data.trips[0].time, '09:15');
+    assert.equal(saved.data.trips[0].dispatchNotes, 'Private creation note');
     assert.equal(saved.data.trips[0].tripDate, '2026-09-26');
     for (const tripDate of ['', '2026-02-30', '2026-13-01', '2026-09-26extra']) {
       assert.equal((await request('/trips', dispatch, 'POST', { trips: [{...tripInput, tripDate}] })).status, 400);
@@ -115,7 +116,7 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal((await request('/trips/pending-B', first, 'PATCH', { action: 'edit', trip: { notes: 'Driver edit' } })).status, 403);
     assert.equal((await request('/trips/pending-B', first, 'DELETE')).status, 403);
     const editPending = await request('/trips/pending-B', dispatch, 'PATCH', { action: 'edit', trip: {
-      payerPhone: '+1 (555) 555-0456', notes: 'Return only', timeType: 'Will Call', time: '10:00', id: 'wrong-id', group: 'OW-injected', leg: 'A',
+      payerPhone: '+1 (555) 555-0456', notes: 'Return only', dispatchNotes: 'Private return note', timeType: 'Will Call', time: '10:00', id: 'wrong-id', group: 'OW-injected', leg: 'A',
       returnPending: false, status: 5, paymentCollected: true, collectedAt: 'injected'
     } });
     assert.equal(editPending.status, 200);
@@ -126,6 +127,8 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal(editPending.data.trip.status, 0);
     assert.equal(editPending.data.trip.paymentCollected, false);
     assert.equal(editPending.data.trip.notes, 'Return only');
+    assert.equal(editPending.data.trip.dispatchNotes, 'Private return note');
+    assert.equal((await request('/trips', dispatch)).data.trips.find(t=>t.id==='pending-A').dispatchNotes,'Private creation note');
     assert.equal(editPending.data.trip.payerPhone, '+1 (555) 555-0456');
     assert.equal(editPending.data.trip.time, '');
     assert.equal((await request('/trips/pending-B', dispatch, 'PATCH', { action: 'edit', trip: { pickup: { address: '' } } })).status, 400);
@@ -151,7 +154,22 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.ok(driverTrips.some(t => t.id === 'pending-B'));
     assert.equal(driverTrips.find(t => t.id === 'pending-B').payerPhone, '+1 (555) 555-0456');
     assert.equal(driverTrips.find(t => t.id === 'pending-A').status, 0);
-    assert.equal((await request('/trips/pending-B', first, 'PATCH', { action: 'advance' })).status, 200);
+    const acceptedPrivate = await request('/trips/pending-B', first, 'PATCH', { action: 'advance', dispatchNotes: 'Injected' });
+    assert.equal(acceptedPrivate.status, 200);
+    assert.ok(!Object.hasOwn(acceptedPrivate.data.trip, 'dispatchNotes'));
+    assert.equal((await request('/trips', dispatch)).data.trips.find(t=>t.id==='pending-B').dispatchNotes,'Private return note');
+    assert.equal((await request('/trips/pending-B', first, 'PATCH', { action:'edit',trip:{dispatchNotes:'Injected'} })).status,403);
+    // Both primary and helper drivers must never receive the field at any visible stage.
+    for (const helper of [false,true]) {
+      for (const status of [0,1,2,3,4]) {
+        const privateTrip={...tripInput,id:'privacy-test',status,driver:helper?'Unassigned':'Test Driver',helperDriver:helper?'Test Driver':'',dispatchNotes:'Private secret'};
+        await query('INSERT INTO trips (id,data) VALUES ($1,$2) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data',['privacy-test',privateTrip]);
+        const visible=(await request('/trips',first)).data.trips.find(t=>t.id==='privacy-test');
+        assert.ok(visible);
+        assert.ok(!Object.hasOwn(visible,'dispatchNotes'));
+      }
+    }
+    await query('DELETE FROM trips WHERE id=$1',['privacy-test']);
     let dispatchNotices = (await request('/notifications', dispatch)).data.notifications;
     const acceptance = dispatchNotices.find(n => n.trip_id === 'pending-B' && n.kind === 'accepted');
     assert.ok(acceptance);

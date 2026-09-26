@@ -393,7 +393,7 @@ async function createTrip() {
     patientAmount: patientPays === "Yes" ? Number($("patientAmount").value || 0) : 0, paymentCollected: patientPays === "Yes" && $("payStatus").value === "Paid",
     collectedBy: patientPays === "Yes" && $("payStatus").value === "Paid" ? "Dispatch" : "",
     collectedAt: patientPays === "Yes" && $("payStatus").value === "Paid" ? new Date().toISOString() : "",
-    auth: $("auth").value, notes: $("notes").value, created: now
+    auth: $("auth").value, notes: $("notes").value, dispatchNotes: $("dispatchNotes").value, created: now
   };
   const group = `${$("isRT").value === "yes" ? "RT" : "OW"}-${now}`;
   const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: $("isRT").value === "yes" ? "Pick Up" : "One Way", tripDate: $("aDate").value, time: $("aTimeType").value === "Will Call" ? "" : $("aTime").value, timeType: $("aTimeType").value, driver: $("aDriver").value,
@@ -500,6 +500,7 @@ function tripCard(t, mode) {
     <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${destinationLocked ? "Destination hidden until you mark Arrived at Pickup." : `${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}`}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Private Payment Due: $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Private Payment Due: NO"}</div>
     ${t.payerType === "NoPay" ? `<div class="step">No Pay</div>` : t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payer Phone: <b>${esc(t.payerPhone || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
+    ${mode === "dispatch" ? `<div class="step"><b>Dispatch Notes — Private</b><div style="white-space:pre-wrap">${esc(t.dispatchNotes || "No private notes.")}</div></div>` : ""}
     ${mode === "dispatch" ? `<div class="actions">${!t.cancelled ? `<button class="danger" onclick="cancelTrip('${esc(t.id)}')">CANCEL TRIP</button>` : ""}<button class="ghost" ${t.cancelled ? "disabled" : ""} onclick="editTrip('${esc(t.id)}')">EDIT TRIP</button><button class="danger" onclick="deleteTrip('${esc(t.id)}')">DELETE TRIP</button></div>` : ""}
     ${mode === "dispatch" && pendingReturn ? `<div class="actions"><button class="primary" onclick="releaseReturn('${esc(t.id)}')" ${drivers.includes(t.driver) ? "" : "disabled"}>DISPATCH RETURN</button></div><p class="small">${drivers.includes(t.driver) ? "Held in Pending Returns until you dispatch it." : "Assign a driver to dispatch this return."}</p>` : ""}
     ${mode === "driver" && dialLink ? `<div class="actions"><a class="ghost call-patient" href="${esc(dialLink)}" aria-label="Call ${esc(t.patient || "patient")}">📞 CALL PATIENT</a></div>` : ""}
@@ -554,7 +555,7 @@ function editTrip(id) {
     payerType: trip.payerType || (trip.patientPays === "Yes" ? "Patient" : "NoPay"),
     patientAmount: trip.patientAmount || 0, paymentByPhone: trip.paymentByPhone || "No",
     payerFirstName: trip.payerFirstName, payerLastName: trip.payerLastName, payerRelationship: trip.payerRelationship, payerPhone: trip.payerPhone,
-    auth: trip.auth, notes: trip.notes
+    auth: trip.auth, notes: trip.notes, dispatchNotes: trip.dispatchNotes || ""
   };
   Object.entries(fields).forEach(([field, value]) => setFormValue(field, value));
   $("isRT").disabled = true;

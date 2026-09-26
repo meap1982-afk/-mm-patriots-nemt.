@@ -36,7 +36,7 @@ test('Dispatch edits only the selected return, cancels to the original form, and
     patientFirstName: 'Test', patientLastName: 'Patient', patient: 'Test Patient', phone: '5555550100',
     driver: 'Test Driver', type: 'Bariatric Wheelchair', payerType: 'Other', patientPays: 'Yes', payerFirstName: 'Pay', payerLastName: 'Person', payerRelationship: 'Friend', payerPhone: '+1 (555) 555-0123', timeType: 'Will Call',
     pickup: { type: 'Hospital', address: '123 Hospital Road, Town, VA 20164', room: '4' },
-    dropoff: { type: 'Home', address: '456 Home Road, Town, VA 20164' }, notes: 'Before' };
+    dropoff: { type: 'Home', address: '456 Home Road, Town, VA 20164' }, dispatchNotes: 'Private before', notes: 'Before' };
   vm.runInContext(`session = {role: 'dispatch', token: 'test'}; trips = [${JSON.stringify(original)}]; editTrip('return-b')`, context);
   assert.equal(fields.get('tripFormTitle').textContent, 'Edit Return');
   assert.equal(fields.get('aPickEditAddress').value, original.pickup.address);
@@ -50,11 +50,14 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   assert.equal(fields.get('aDate').value, '2026-09-28');
   fields.get('aDate').value = '2026-09-29';
   fields.get('notes').value = 'Changed return';
+  assert.equal(fields.get('dispatchNotes').value, 'Private before');
+  fields.get('dispatchNotes').value = 'Private after';
   await vm.runInContext('createTrip()', context);
   const edit = calls.find(c => c.method === 'PATCH');
   assert.equal(edit.url, '/api/trips/return-b');
   assert.equal(JSON.parse(edit.body).action, 'edit');
   assert.equal(JSON.parse(edit.body).trip.notes, 'Changed return');
+  assert.equal(JSON.parse(edit.body).trip.dispatchNotes, 'Private after');
   assert.equal(JSON.parse(edit.body).trip.tripDate, '2026-09-29');
   assert.equal(JSON.parse(edit.body).trip.payerPhone, '+1 (555) 555-0456');
   assert.equal(JSON.parse(edit.body).trip.pickup.address, original.pickup.address);
@@ -141,4 +144,13 @@ test('trip schedules sort by service date and time with will-call and undated tr
   }
   assert.equal(vm.runInContext('validTripDate("2028-02-29")',context),true);
   assert.equal(vm.runInContext('validTripDate("2026-02-29")',context),false);
+});
+
+
+test('private Dispatch notes are escaped and never rendered in driver cards',()=>{
+  const context=vm.createContext({document:{addEventListener(){}},localStorage:{getItem:()=> 'null'},window:{},console});
+  vm.runInContext(fs.readFileSync(require.resolve('../app.js'),'utf8').split('for (const leg of ["a", "b"])')[0],context);
+  vm.runInContext(`trip={id:'private',dispatchNotes:'Secret <script>alert(1)</script>',status:2}`,context);
+  assert.match(vm.runInContext('tripCard(trip,"dispatch")',context),/Secret &lt;script&gt;/);
+  assert.doesNotMatch(vm.runInContext('tripCard(trip,"driver")',context),/Secret|Dispatch Notes/);
 });

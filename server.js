@@ -99,7 +99,7 @@ payerRelationship: payerType === "NoPay" ? "" : patientPays === "Yes" && payerTy
 paymentByPhone,
 collectedBy: cleanString(input.collectedBy, 100),
 collectedAt: cleanString(input.collectedAt, 100),
-    auth: cleanString(input.auth, 150), notes: cleanString(input.notes, 1500), created: Number(input.created || Date.now()),
+    auth: cleanString(input.auth, 150), notes: cleanString(input.notes, 1500), dispatchNotes: cleanString(input.dispatchNotes, 1500), created: Number(input.created || Date.now()),
     tripDate: cleanString(input.tripDate, 40),
     time: timeType === "Will Call" ? "" : cleanString(input.time, 30), timeType, driver: cleanString(input.driver, 100),
     pickup: { type: cleanString(input.pickup?.type, 60), address: cleanString(input.pickup?.address, 300), room: cleanString(input.pickup?.room, 80) },
@@ -233,8 +233,10 @@ app.patch("/api/notifications/:id/read", auth, async (req, res, next) => {
 
 function visibleTrip(trip, user) {
   if (user.role !== "dispatch" && Number(trip.status) >= 5) return null;
-  if (user.role === "dispatch" || Number(trip.status) >= 2) return trip;
-  return { ...trip, dropoff: null, destinationLocked: true };
+  if (user.role === "dispatch") return trip;
+  const { dispatchNotes, ...driverTrip } = trip;
+  if (Number(trip.status) >= 2) return driverTrip;
+  return { ...driverTrip, dropoff: null, destinationLocked: true };
 }
 
 app.get("/api/trips", auth, async (req, res, next) => {
@@ -354,7 +356,7 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       }
       const fields = ["patientFirstName", "patientLastName", "phone", "weight", "type", "needsWheelchair", "needsOxygen",
         "hasStairs", "stairsCount", "hasCompanion", "twoMen", "needsHelper", "helperDriver", "driver",
-        "tripDate", "time", "timeType", "pickup", "dropoff", "auth", "notes"];
+        "tripDate", "time", "timeType", "pickup", "dropoff", "auth", "notes", "dispatchNotes"];
       if (!trip.paymentCollected) fields.push("payment", "patientPays", "payerType", "patientAmount", "paymentByPhone",
         "payerFirstName", "payerLastName", "payerRelationship", "payerPhone");
       const changes = {};
