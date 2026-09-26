@@ -110,7 +110,7 @@ async function refreshDriverLocations() {
       const latitude = Number(item.latitude);
       const longitude = Number(item.longitude);
       const url = `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`;
-      return `<div class="step">📍 <b>${esc(item.driver)}</b> · updated ${esc(displayDate(item.updated_at))}
+      return `<div class="step ${item.current ? "done" : "current"}">📍 <b>${esc(item.driver)}</b> · ${item.current ? "Live" : "Last known (stale)"} · updated ${esc(displayDate(item.updated_at))}
         · accuracy ~${Math.round(Number(item.accuracy))} m
         · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View on map</a></div>`;
     }).join("") : '<div class="step">No drivers sharing a recent location.</div>';
@@ -155,6 +155,14 @@ async function sendLocation() {
 
 function startLocationSharing() {
   if (session?.role !== "driver" || sharingLocation) return;
+  if (window.webkit?.messageHandlers?.driverLocation) {
+    sharingLocation = true;
+    locationMessage("Starting background location…");
+    window.webkit.messageHandlers.driverLocation.postMessage({
+      action: "checkIn", token: session.token, driver: session.driver
+    });
+    return;
+  }
   if (!window.isSecureContext) return locationMessage("Location requires an HTTPS connection.");
   sharingLocation = true;
   locationMessage("Requesting location permission…");
@@ -169,8 +177,19 @@ function stopLocationSharing() {
   clearInterval(locationTimer);
   locationMessage("Offline · location sharing stopped.");
   render();
-  api("/driver-location", { method: "DELETE" }).catch((error) => console.error(error));
+  if (window.webkit?.messageHandlers?.driverLocation) {
+    window.webkit.messageHandlers.driverLocation.postMessage({ action: "checkOut" });
+  } else {
+    api("/driver-location", { method: "DELETE" }).catch((error) => console.error(error));
+  }
 }
+
+window.nativeLocationState = (online, message) => {
+  if (session?.role !== "driver" || !sharingLocation) return;
+  locationOnline = online === true;
+  locationMessage(message || (locationOnline ? "Online · background location active" : "Offline · location unavailable"));
+  render();
+};
 
 function toggleLocationSharing() {
   if (sharingLocation) logout();
