@@ -61,6 +61,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Trip Type *</label><select id="tripType"><option>Ambulatory</option><option selected>Wheelchair</option><option>Stretcher</option></select></div>
     <div class="grow"><label>Need Wheelchair?</label><select id="needsWheelchair"><option>Yes</option><option>No</option></select></div>
     <div class="grow"><label>Need Oxygen?</label><select id="needsOxygen"><option>No</option><option>Yes</option></select></div>
+    <div class="grow"><label>Companion?</label><select id="hasCompanion"><option>No</option><option>Yes</option></select></div>
     <div class="grow"><label>Has Stairs?</label><select id="hasStairs"><option>No</option><option>Yes</option></select></div>
     <div class="grow hidden" id="stairsCountWrap"><label>How Many Steps? *</label><input id="stairsCount" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="Number of steps"></div>
     <div class="grow"><label>Trip Service</label><select id="isRT"><option value="yes">R/T</option><option value="no">One Way</option></select></div>
@@ -104,9 +105,18 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    <div class="row">
     <div class="grow"><label>Payment Method</label><select id="payment"><option>Insurance / Broker</option><option>Private Pay</option><option>Credit / Debit Card</option><option>Cash</option><option>Check</option><option>Facility / Hospital</option><option>Invoice / Billing</option><option>Other</option></select></div>
     <div class="grow"><label>Payment Status</label><select id="payStatus"><option>Pending</option><option>Paid</option><option>Invoice</option></select></div>
-    <div class="grow"><label>Does Patient Pay?</label><select id="patientPays"><option value="No">No</option><option value="Yes">Yes</option></select></div>
+    <div class="grow"><label>Private Payment Due?</label><select id="patientPays"><option value="No">No</option><option value="Yes">Yes</option></select></div>
     <div class="grow"><label>Patient Amount Due</label><input id="patientAmount" type="number" min="0" step="0.01" value="0.00" placeholder="$0.00"></div>
-    <div class="grow"><label>Authorization / Confirmation #</label><input id="auth" placeholder="Optional"></div>
+   <div class="grow"><label>Authorization / Confirmation #</label><input id="auth" placeholder="Optional"></div>
+   </div>
+   <div class="row hidden" id="payerFields">
+    <div class="grow"><label>Who Will Pay?</label><select id="payerType"><option value="Patient">Patient Pays</option><option value="Other">Another Person Pays</option></select></div>
+    <div class="grow"><label>Payment by Phone?</label><select id="paymentByPhone"><option>No</option><option>Yes</option></select></div>
+   </div>
+   <div class="row hidden" id="payerNameFields">
+    <div class="grow"><label>Payer First Name *</label><input id="payerFirstName" autocomplete="off" maxlength="75" placeholder="First name"></div>
+    <div class="grow"><label>Payer Last Name *</label><input id="payerLastName" autocomplete="off" maxlength="75" placeholder="Last name"></div>
+    <div class="grow"><label>Relationship to Patient *</label><input id="payerRelationship" autocomplete="off" maxlength="80" placeholder="e.g. daughter, spouse, friend"></div>
    </div>
    <label>Notes</label><textarea id="notes" rows="3" placeholder="Patient or facility notes"></textarea>
    <div class="actions"><button class="primary" onclick="createTrip()">Create Trip</button></div>
