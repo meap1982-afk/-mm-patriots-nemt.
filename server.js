@@ -21,9 +21,9 @@ if (!process.env.DATABASE_URL || !jwtSecret || !dispatchCode) {
 }
 const configuredCodes = drivers.map((name) => driverAccessCodes[name]);
 if (new Set(drivers).size !== drivers.length ||
-    configuredCodes.some((code) => typeof code !== "string" || code.length < 8) ||
+    configuredCodes.some((code) => typeof code !== "string" || !/^\d{4}$/.test(code)) ||
     new Set(configuredCodes).size !== configuredCodes.length) {
-  throw new Error("Every driver needs a unique DRIVER_ACCESS_CODES password of at least 8 characters");
+  throw new Error("Every driver needs a unique four-digit DRIVER_ACCESS_CODES PIN");
 }
 
 const pool = new Pool({
