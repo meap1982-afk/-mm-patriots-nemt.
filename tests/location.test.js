@@ -89,6 +89,7 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal(list[0].current, true);
     assert.ok(list[0].recorded_at && list[0].updated_at);
     assert.equal((await request('/trips/trip', first, 'PATCH', { action: 'advance' })).status, 200);
+    for (let step = 0; step < 4; step++) assert.equal((await request('/trips/trip', first, 'PATCH', { action: 'advance' })).status, 200);
     // A new R/T pair immediately sends only A to the driver; B waits for Dispatch.
     const pair = ['A', 'B'].map(leg => ({ ...tripInput, id: `pending-${leg}`, group: 'RT-pending-test', leg, driver: 'Test Driver', returnPending: false }));
     const createdPair = await request('/trips', dispatch, 'POST', { trips: pair });
@@ -143,9 +144,33 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.ok(!(await inbox()).some(n => n.kind === 'accepted'));
     await request(`/notifications/${acceptance.id}/read`, first, 'PATCH');
     assert.ok((await request('/notifications', dispatch)).data.notifications.some(n => n.id === acceptance.id));
+    assert.equal((await request('/trips/pending-A', dispatch, 'PATCH', { action: 'releaseReturn' })).status, 409);
+    const editActive = await request('/trips/pending-B', dispatch, 'PATCH', { action: 'edit', trip: { notes: 'Still accepted', status: 0 } });
+    assert.equal(editActive.data.trip.status, 1);
+    assert.equal((await request('/trips/pending-B', dispatch, 'DELETE')).status, 200);
+    assert.equal((await inbox()).filter(n => n.trip_id === 'pending-B' && n.kind === 'cancelled').length, 1);
+    assert.equal((await request('/trips/pending-B', dispatch, 'DELETE')).status, 404);
+    const remaining = (await request('/trips', dispatch)).data.trips;
+    assert.ok(!remaining.some(t => t.id === 'pending-B'));
+    assert.ok(remaining.some(t => t.id === 'pending-A'));
     assert.equal((await request('/trips', dispatch, 'POST', { trips: [{...tripInput, id: 'dropoff-test', driver: 'Test Driver'}] })).status, 201);
+    const assignedView = (await request('/trips', first)).data.trips.find(t => t.id === 'dropoff-test');
+    assert.equal(assignedView.dropoff, null);
+    assert.equal(assignedView.destinationLocked, true);
+    assert.equal((await request('/trips', dispatch)).data.trips.find(t => t.id === 'dropoff-test').dropoff.address, tripInput.dropoff.address);
     for (let status = 1; status <= 4; status++) {
-      assert.equal((await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' })).status, 200);
+      const advanced = await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' });
+      assert.equal(advanced.status, 200);
+      const listed = (await request('/trips', first)).data.trips.find(t => t.id === 'dropoff-test');
+      for (const view of [advanced.data.trip, listed]) {
+        if (status < 2) {
+          assert.equal(view.dropoff, null);
+          assert.equal(view.destinationLocked, true);
+        } else {
+          assert.equal(view.dropoff.address, tripInput.dropoff.address);
+          assert.notEqual(view.destinationLocked, true);
+        }
+      }
     }
     assert.ok(!(await request('/notifications', dispatch)).data.notifications.some(n => n.trip_id === 'dropoff-test' && n.kind === 'dropped_off'));
     assert.equal((await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' })).status, 200);
@@ -156,15 +181,6 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     await request(`/notifications/${acceptance.id}/read`, dispatch, 'PATCH');
     assert.ok(!(await request('/notifications', dispatch)).data.notifications.some(n => n.id === acceptance.id));
 
-    assert.equal((await request('/trips/pending-A', dispatch, 'PATCH', { action: 'releaseReturn' })).status, 409);
-    const editActive = await request('/trips/pending-B', dispatch, 'PATCH', { action: 'edit', trip: { notes: 'Still accepted', status: 0 } });
-    assert.equal(editActive.data.trip.status, 1);
-    assert.equal((await request('/trips/pending-B', dispatch, 'DELETE')).status, 200);
-    assert.equal((await inbox()).filter(n => n.trip_id === 'pending-B' && n.kind === 'cancelled').length, 1);
-    assert.equal((await request('/trips/pending-B', dispatch, 'DELETE')).status, 404);
-    const remaining = (await request('/trips', dispatch)).data.trips;
-    assert.ok(!remaining.some(t => t.id === 'pending-B'));
-    assert.ok(remaining.some(t => t.id === 'pending-A'));
     const paid = { ...tripInput, id: 'paid-trip', patientFirstName: 'Paid', patientLastName: 'Patient',
       payerType: 'Patient', patientPays: 'Yes', patientAmount: 75, paymentCollected: true, payStatus: 'Paid',
       collectedBy: 'Dispatch', collectedAt: new Date().toISOString(), paymentMethod: 'Cash' };
@@ -178,6 +194,28 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal(editedPaid.data.trip.paymentCollected, true);
     assert.equal(editedPaid.data.trip.payStatus, 'Paid');
     assert.equal(editedPaid.data.trip.collectedBy, 'Dispatch');
+    // A driver must finish the active outbound leg, and collect payment on OW/return completion.
+    const payable = { ...tripInput, driver: 'Test Driver', patientFirstName: 'Test', patientLastName: 'Patient',
+      patientPays: 'Yes', payerType: 'Patient', patientAmount: 50, paymentCollected: false, payStatus: 'Pending' };
+    const workflowPair = ['A','B'].map(leg => ({ ...payable, id: `workflow-${leg}`, group:'RT-workflow', leg }));
+    await request('/trips', dispatch, 'POST', { trips: workflowPair });
+    await request('/trips', dispatch, 'POST', { trips: [{ ...payable, id:'workflow-ow', group:'OW-workflow', leg:'A' }] });
+    assert.equal((await request('/trips/workflow-A', first, 'PATCH', { action:'advance' })).status, 200);
+    assert.equal((await request('/trips/workflow-ow', first, 'PATCH', { action:'advance' })).status, 409);
+    for (let step = 0; step < 3; step++) await request('/trips/workflow-A', first, 'PATCH', { action:'advance' });
+    assert.equal((await request('/trips/workflow-ow', first, 'PATCH', { action:'advance' })).status, 409); // Arrival is not drop-off.
+    assert.equal((await request('/trips/workflow-A', first, 'PATCH', { action:'advance' })).status, 200); // Outbound can finish before R/T payment.
+    assert.equal((await request('/trips/workflow-ow', first, 'PATCH', { action:'advance' })).status, 200);
+    for (let step = 0; step < 3; step++) await request('/trips/workflow-ow', first, 'PATCH', { action:'advance' });
+    assert.equal((await request('/trips/workflow-ow', first, 'PATCH', { action:'advance' })).status, 409);
+    assert.equal((await request('/trips/workflow-ow', dispatch, 'PATCH', { action:'advance' })).status, 409);
+    assert.equal((await request('/trips/workflow-ow', first, 'PATCH', { action:'collectPayment', paymentMethod:'Cash' })).status, 200);
+    assert.equal((await request('/trips/workflow-ow', first, 'PATCH', { action:'advance' })).status, 200);
+    await request('/trips/workflow-B', dispatch, 'PATCH', { action:'releaseReturn' });
+    for (let step = 0; step < 4; step++) assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'advance' })).status, 200);
+    assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'advance' })).status, 409);
+    assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'collectPayment', paymentMethod:'Credit Card' })).status, 200);
+    assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'advance' })).status, 200);
     await query("UPDATE driver_locations SET recorded_at=NOW() - INTERVAL '2 minutes'");
     assert.equal((await request('/driver-locations', dispatch)).data.locations[0].current, false);
     assert.equal((await request('/trips/trip', first, 'PATCH', { action: 'advance' })).status, 409);

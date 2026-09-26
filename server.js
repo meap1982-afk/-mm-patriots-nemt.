@@ -225,12 +225,17 @@ app.patch("/api/notifications/:id/read", auth, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+function visibleTrip(trip, user) {
+  if (user.role === "dispatch" || Number(trip.status) >= 2) return trip;
+  return { ...trip, dropoff: null, destinationLocked: true };
+}
+
 app.get("/api/trips", auth, async (req, res, next) => {
   try {
     const result = req.user.role === "dispatch"
       ? await pool.query("SELECT data FROM trips ORDER BY created_at DESC")
       : await pool.query("SELECT data FROM trips WHERE (data->>'driver'=$1 OR data->>'helperDriver'=$1) AND data->>'returnPending' IS DISTINCT FROM 'true' AND data->>'cancelled' IS DISTINCT FROM 'true' ORDER BY created_at DESC", [req.user.driver]);
-    res.json({ trips: result.rows.map((row) => row.data) });
+    res.json({ trips: result.rows.map((row) => visibleTrip(row.data, req.user)) });
   } catch (error) { next(error); }
 });
 
@@ -247,6 +252,8 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Serialize trip changes so simultaneous requests cannot start two trips for a driver.
+    await client.query("SELECT pg_advisory_xact_lock(193674, 1)");
     for (const trip of incoming) {
       const existing = await client.query("SELECT data FROM trips WHERE id=$1 FOR UPDATE", [trip.id]);
       await client.query("INSERT INTO trips (id,data,created_at,updated_at) VALUES ($1,$2,to_timestamp($3/1000.0),NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()", [trip.id, trip, trip.created]);
@@ -262,6 +269,8 @@ app.delete("/api/trips/:id", auth, dispatchOnly, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Serialize trip changes so simultaneous requests cannot start two trips for a driver.
+    await client.query("SELECT pg_advisory_xact_lock(193674, 1)");
     const result = await client.query("DELETE FROM trips WHERE id=$1 RETURNING data", [req.params.id]);
     if (!result.rowCount) {
       await client.query("ROLLBACK");
@@ -280,6 +289,8 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Serialize trip changes so simultaneous requests cannot start two trips for a driver.
+    await client.query("SELECT pg_advisory_xact_lock(193674, 1)");
     const initial = await client.query("SELECT data FROM trips WHERE id=$1", [req.params.id]);
     if (!initial.rowCount) {
       await client.query("ROLLBACK");
@@ -367,10 +378,21 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Trip is already completed." });
       }
-      if (trip.leg === "B" && String(trip.group || "").startsWith("RT-") &&
-          trip.patientPays === "Yes" && !trip.paymentCollected && status === 4) {
+      if (status === 0) {
+        const assignedDrivers = tripRecipients(trip);
+        const active = await client.query(
+          "SELECT id FROM trips WHERE id<>$1 AND data->>'cancelled' IS DISTINCT FROM 'true' AND data->>'returnPending' IS DISTINCT FROM 'true' AND (data->>'status')::numeric BETWEEN 1 AND 4 AND (data->>'driver'=ANY($2::text[]) OR data->>'helperDriver'=ANY($2::text[])) LIMIT 1",
+          [trip.id, assignedDrivers]
+        );
+        if (active.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: "Mark the patient dropped off and complete the current trip before accepting the next trip." });
+        }
+      }
+      const outboundRT = trip.leg === "A" && String(trip.group || "").startsWith("RT-");
+      if (!outboundRT && trip.patientPays === "Yes" && !trip.paymentCollected && status === 4) {
         await client.query("ROLLBACK");
-        return res.status(400).json({ error: "Collect the R/T payment before completing the return trip." });
+        return res.status(409).json({ error: "Record the required payment before completing this return or One Way trip." });
       }
       const labels = ["Assigned", "Accepted", "Arrived at Pickup", "Patient Picked Up", "Arrived at Destination", "Completed"];
       trip.status = status + 1;
@@ -422,7 +444,7 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
         [crypto.randomUUID(), "", "dispatch", updated.id, updated.status === 1 ? "accepted" : "dropped_off", updated.leg === "B" ? "Return" : "Pick Up", req.user.driver]);
     }
     await client.query("COMMIT");
-    res.json({ trip: updated });
+    res.json({ trip: visibleTrip(updated, req.user) });
   } catch (error) {
     await client.query("ROLLBACK");
     next(error);

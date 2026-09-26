@@ -80,3 +80,40 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   assert.doesNotMatch(vm.runInContext('tripCard({...trip, payerPhone: ""}, "driver")', context), /CALL PAYER/);
   assert.doesNotMatch(vm.runInContext('tripCard({...trip, patientPays: "No", payerType: "NoPay"}, "driver")', context), /CALL PAYER/);
 });
+
+
+test('destination address, type, room and map are hidden until arrival at pickup', () => {
+  const context = vm.createContext({ document: { addEventListener() {} }, localStorage: { getItem: () => 'null' }, window: {}, console });
+  vm.runInContext(fs.readFileSync(require.resolve('../app.js'), 'utf8').split('for (const leg of ["a", "b"])')[0], context);
+  vm.runInContext(`trip = {id:'hidden', pickup:{address:'Pickup Road'}, dropoff:{address:'Secret Destination',type:'Secret Facility',room:'Secret Room'}}`, context);
+  for (const status of [0,1]) {
+    const card = vm.runInContext(`tripCard({...trip,status:${status}}, "driver")`, context);
+    assert.match(card, /Destination hidden/);
+    assert.doesNotMatch(card, /Secret|Secret%20/);
+    assert.match(card, /Pickup Road/);
+  }
+  for (const status of [2,3,4,5]) {
+    assert.match(vm.runInContext(`tripCard({...trip,status:${status}}, "driver")`, context), /Secret Destination/);
+  }
+  assert.match(vm.runInContext('tripCard({...trip,status:0}, "dispatch")', context), /Secret Destination/);
+});
+
+
+test('driver buttons explain drop-off and payment blocks without blocking collection', () => {
+  const context = vm.createContext({ document:{addEventListener(){}}, localStorage:{getItem:()=> 'null'}, window:{},console });
+  vm.runInContext(fs.readFileSync(require.resolve('../app.js'),'utf8').split('for (const leg of ["a", "b"])')[0],context);
+  vm.runInContext(`locationOnline=true; trips=[{id:'active',group:'RT-first',leg:'A',status:4,driver:'Test'}, {id:'next',status:0,driver:'Test'}]`,context);
+  const waiting=vm.runInContext('tripCard(trips[1],"driver")',context);
+  assert.match(waiting, /onclick="advance\('next'\)" disabled/);
+  assert.match(waiting, /complete the current trip/);
+  vm.runInContext('trips[0].status=5',context);
+  assert.doesNotMatch(vm.runInContext('tripCard(trips[1],"driver")',context), /onclick="advance\('next'\)" disabled/);
+  vm.runInContext(`due={id:'due',group:'OW-one',leg:'A',status:4,patientPays:'Yes',patientAmount:50,paymentCollected:false}`,context);
+  const unpaid=vm.runInContext('tripCard(due,"driver")',context);
+  assert.match(unpaid,/onclick="advance\('due'\)" disabled/);
+  assert.doesNotMatch(unpaid,/onclick="collectPayment\('due'\)" disabled/);
+  assert.equal(vm.runInContext('tripAdvanceBlock({...due,paymentCollected:true})',context),'');
+  assert.equal(vm.runInContext('tripAdvanceBlock({...due,group:"RT-pair",leg:"A"})',context),'');
+  assert.notEqual(vm.runInContext('tripAdvanceBlock({...due,group:"RT-pair",leg:"B"})',context),'');
+  assert.equal(vm.runInContext('tripAdvanceBlock({...due,patientPays:"No"})',context),'');
+});

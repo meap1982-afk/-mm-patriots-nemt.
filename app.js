@@ -437,8 +437,24 @@ function isPendingReturn(trip) {
   return !trip.cancelled && trip.returnPending === true && trip.leg === "B" && String(trip.group || "").startsWith("RT-");
 }
 
+function tripAdvanceBlock(trip) {
+  if (Number(trip.status || 0) === 0) {
+    const assigned = [trip.driver, trip.helperDriver].filter(name => name && name !== "Unassigned");
+    const current = trips.find(other => other.id !== trip.id && !other.cancelled && !isPendingReturn(other) &&
+      Number(other.status) >= 1 && Number(other.status) < 5 &&
+      [other.driver, other.helperDriver].some(name => assigned.includes(name)));
+    if (current) return "Mark the patient dropped off and complete the current trip before accepting this trip.";
+  }
+  const outboundRT = trip.leg === "A" && String(trip.group || "").startsWith("RT-");
+  if (!outboundRT && Number(trip.status) === 4 && trip.patientPays === "Yes" && !trip.paymentCollected)
+    return "Record the required payment before completing this trip.";
+  return "";
+}
+
 function tripCard(t, mode) {
   const pendingReturn = isPendingReturn(t);
+  const advanceBlock = mode === "driver" ? tripAdvanceBlock(t) : "";
+  const destinationLocked = mode === "driver" && (t.destinationLocked === true || !(Number(t.status) >= 2));
   const status = t.cancelled ? "Cancelled" : pendingReturn ? "Pending Return" : steps[Number(t.status || 0)] || steps[0];
   const roundTrip = String(t.group || "").startsWith("RT-");
   const tripLabel = roundTrip ? (t.leg === "B" ? "Return" : "Pick Up") : "One Way";
@@ -460,7 +476,7 @@ function tripCard(t, mode) {
     <div class="step ${t.hasStairs === "Yes" ? "current" : ""}">Stairs: <b>${stairs}</b></div>
     <div class="step ${t.hasCompanion === "Yes" ? "current" : ""}">Companion: <b>${companion}</b></div>
     ${t.needsHelper === "Yes" ? `<div class="meta">🧑‍🤝‍🧑 <b>Helper Driver:</b> ${esc(t.helperDriver || "Unassigned")}</div>` : ""}
-    <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Private Payment Due: $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Private Payment Due: NO"}</div>
+    <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${destinationLocked ? "Destination hidden until you mark Arrived at Pickup." : `${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}`}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Private Payment Due: $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Private Payment Due: NO"}</div>
     ${t.payerType === "NoPay" ? `<div class="step">No Pay</div>` : t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payer Phone: <b>${esc(t.payerPhone || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
     ${mode === "dispatch" ? `<div class="actions">${!t.cancelled ? `<button class="danger" onclick="cancelTrip('${esc(t.id)}')">CANCEL TRIP</button>` : ""}<button class="ghost" ${t.cancelled ? "disabled" : ""} onclick="editTrip('${esc(t.id)}')">EDIT TRIP</button><button class="danger" onclick="deleteTrip('${esc(t.id)}')">DELETE TRIP</button></div>` : ""}
@@ -468,7 +484,8 @@ function tripCard(t, mode) {
     ${mode === "driver" && dialLink ? `<div class="actions"><a class="ghost call-patient" href="${esc(dialLink)}" aria-label="Call ${esc(t.patient || "patient")}">📞 CALL PATIENT</a></div>` : ""}
     ${mode === "driver" && t.patientPays === "Yes" && payerDialLink ? `<div class="actions"><a class="ghost call-payer" href="${esc(payerDialLink)}" aria-label="Call payer ${esc(payerName)}">📞 CALL PAYER</a></div>` : ""}
     ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
-    ${mode === "driver" && Number(t.status) < 5 ? `<div class="actions"><button class="${Number(t.status) === 0 ? "success" : "primary"}" onclick="advance('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>${Number(t.status) === 0 ? "ACCEPT TRIP" : esc(next.toUpperCase())}</button></div>` : ""}
+    ${mode === "driver" && Number(t.status) < 5 ? `<div class="actions"><button class="${Number(t.status) === 0 ? "success" : "primary"}" onclick="advance('${esc(t.id)}')" ${locationOnline && !advanceBlock ? "" : "disabled"}>${Number(t.status) === 0 ? "ACCEPT TRIP" : esc(next.toUpperCase())}</button></div>` : ""}
+    ${advanceBlock ? `<div class="step current">${esc(advanceBlock)}</div>` : ""}
     ${mode === "driver" && Number(t.status) === 5 ? `<div class="step done">✓ Trip Completed</div>` : ""}
     ${mode === "dispatch" ? `<div class="step ${Number(t.status) === 5 ? "done" : "current"}">${esc(status)}</div>${t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ Payment Collected: $${Number(t.patientAmount || 0).toFixed(2)} · ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</div>` : `<div class="step current">Payment Due: $${Number(t.patientAmount || 0).toFixed(2)} — Not Collected</div>`) : ""}` : ""}
   </div>`;
@@ -573,6 +590,10 @@ function changeDriver(id, driver) { return patchTrip(id, { driver }); }
 function changeHelper(id, helperDriver) { return patchTrip(id, { helperDriver }); }
 function advance(id) {
   if (!locationOnline) return alert("Go online and allow location access before updating a trip.");
+  const trip = trips.find(item => item.id === id);
+  if (!trip) return;
+  const blocked = tripAdvanceBlock(trip);
+  if (blocked) return alert(blocked);
   return patchTrip(id, { action: "advance" });
 }
 function collectPayment(id) {
