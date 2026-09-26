@@ -6,7 +6,7 @@ const pg = require('pg');
 
 // Exercise production HTTP handlers and SQL against an isolated PostgreSQL engine.
 // PGlite has one connection; concurrent multi-connection lock scheduling needs real PG.
-test('required location, Dispatch visibility, checkout and replacement shifts', async () => {
+test('driver location, pickup times, pending R/T returns and checkout', async () => {
   const db = new PGlite();
   const query = async (sql, params) => {
     const result = await db.query(sql, params);
@@ -61,6 +61,33 @@ test('required location, Dispatch visibility, checkout and replacement shifts', 
     assert.equal(list[0].current, true);
     assert.ok(list[0].recorded_at && list[0].updated_at);
     assert.equal((await request('/trips/trip', first, 'PATCH', { action: 'advance' })).status, 200);
+    // A new R/T pair immediately sends only A to the driver; B waits for Dispatch.
+    const pair = ['A', 'B'].map(leg => ({ ...tripInput, id: `pending-${leg}`, group: 'RT-pending-test', leg, driver: 'Test Driver', returnPending: false }));
+    const createdPair = await request('/trips', dispatch, 'POST', { trips: pair });
+    assert.equal(createdPair.status, 201);
+    assert.equal(createdPair.data.trips[0].returnPending, false);
+    assert.equal(createdPair.data.trips[1].returnPending, true);
+    let driverTrips = (await request('/trips', first)).data.trips;
+    assert.ok(driverTrips.some(t => t.id === 'pending-A'));
+    assert.ok(!driverTrips.some(t => t.id === 'pending-B'));
+    assert.ok((await request('/trips', dispatch)).data.trips.some(t => t.id === 'pending-B' && t.returnPending));
+    assert.equal((await request('/trips/pending-B', first, 'PATCH', { action: 'advance' })).status, 409);
+    assert.equal((await request('/trips/pending-B', first, 'PATCH', { action: 'releaseReturn' })).status, 409);
+    assert.equal((await request('/trips/pending-B', dispatch, 'PATCH', { action: 'advance' })).status, 409);
+    await request('/trips/pending-B', dispatch, 'PATCH', { driver: 'Unassigned', helperDriver: 'Test Driver' });
+    assert.ok(!(await request('/trips', first)).data.trips.some(t => t.id === 'pending-B'));
+    assert.equal((await request('/trips/pending-B', dispatch, 'PATCH', { action: 'releaseReturn' })).status, 400);
+    await request('/trips/pending-B', dispatch, 'PATCH', { driver: 'Test Driver' });
+    const released = await request('/trips/pending-B', dispatch, 'PATCH', { action: 'releaseReturn' });
+    assert.equal(released.status, 200);
+    assert.equal(released.data.trip.returnPending, false);
+    assert.equal(released.data.trip.status, 0);
+    assert.equal((await request('/trips/pending-B', dispatch, 'PATCH', { action: 'releaseReturn' })).status, 409);
+    driverTrips = (await request('/trips', first)).data.trips;
+    assert.ok(driverTrips.some(t => t.id === 'pending-B'));
+    assert.equal(driverTrips.find(t => t.id === 'pending-A').status, 0);
+    assert.equal((await request('/trips/pending-B', first, 'PATCH', { action: 'advance' })).status, 200);
+    assert.equal((await request('/trips/pending-A', dispatch, 'PATCH', { action: 'releaseReturn' })).status, 409);
     await query("UPDATE driver_locations SET recorded_at=NOW() - INTERVAL '2 minutes'");
     assert.equal((await request('/driver-locations', dispatch)).data.locations[0].current, false);
     assert.equal((await request('/trips/trip', first, 'PATCH', { action: 'advance' })).status, 409);

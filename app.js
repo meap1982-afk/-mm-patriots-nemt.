@@ -279,14 +279,14 @@ async function createTrip() {
   const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: $("isRT").value === "yes" ? "Pick Up" : "One Way", time: $("aTimeType").value === "Will Call" ? "" : $("aTime").value, timeType: $("aTimeType").value, driver: $("aDriver").value,
     pickup: loc($("aPickType").value, addressText(pickup), pickup.room),
     dropoff: loc($("aDropType").value, addressText(dropoff), dropoff.room), status: 0, events: [] }];
-  if ($("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", time: $("bTimeType").value === "Will Call" ? "" : $("bTime").value,
+  if ($("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", returnPending: true, time: $("bTimeType").value === "Will Call" ? "" : $("bTime").value,
     timeType: $("bTimeType").value, driver: $("bDriver").value,
     pickup: loc($("aDropType").value, addressText(dropoff), dropoff.room),
     dropoff: loc($("aPickType").value, addressText(pickup), pickup.room), status: 0, events: [] });
   try {
     setSync("", "Saving…");
     await api("/trips", { method: "POST", body: JSON.stringify({ trips: newTrips }) });
-    await refreshTrips(); alert("Trip saved and shared with the assigned driver.");
+    await refreshTrips(); alert($("isRT").value === "yes" ? "Pick Up shared with the driver. Return saved separately in Pending Returns." : "Trip saved and shared with the assigned driver.");
   } catch (error) { setSync("offline", "Save failed"); alert(error.message); }
 }
 
@@ -307,8 +307,13 @@ function phoneDialLink(value) {
   return `tel:${phone.startsWith("+") ? "+" : ""}${digits}`;
 }
 
+function isPendingReturn(trip) {
+  return trip.returnPending === true && trip.leg === "B" && String(trip.group || "").startsWith("RT-");
+}
+
 function tripCard(t, mode) {
-  const status = steps[Number(t.status || 0)] || steps[0];
+  const pendingReturn = isPendingReturn(t);
+  const status = pendingReturn ? "Pending Return" : steps[Number(t.status || 0)] || steps[0];
   const roundTrip = String(t.group || "").startsWith("RT-");
   const tripLabel = roundTrip ? (t.leg === "B" ? "Return" : "Pick Up") : "One Way";
   const needsWheelchair = t.needsWheelchair === "Yes" || (t.needsWheelchair == null && ["Wheelchair", "Bariatric Wheelchair"].includes(t.type));
@@ -331,6 +336,7 @@ function tripCard(t, mode) {
     <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Private Payment Due: $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Private Payment Due: NO"}</div>
     ${t.payerType === "NoPay" ? `<div class="step">No Pay</div>` : t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
+    ${mode === "dispatch" && pendingReturn ? `<div class="actions"><button class="primary" onclick="releaseReturn('${esc(t.id)}')" ${drivers.includes(t.driver) ? "" : "disabled"}>DISPATCH RETURN</button></div><p class="small">${drivers.includes(t.driver) ? "Held in Pending Returns until you dispatch it." : "Assign a driver to dispatch this return."}</p>` : ""}
     ${mode === "driver" && dialLink ? `<div class="actions"><a class="ghost call-patient" href="${esc(dialLink)}" aria-label="Call ${esc(t.patient || "patient")}">📞 CALL PATIENT</a></div>` : ""}
     ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
     ${mode === "driver" && Number(t.status) < 5 ? `<div class="actions"><button class="${Number(t.status) === 0 ? "success" : "primary"}" onclick="advance('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>${Number(t.status) === 0 ? "ACCEPT TRIP" : esc(next.toUpperCase())}</button></div>` : ""}
@@ -344,6 +350,7 @@ async function patchTrip(id, body) {
   catch (error) { setSync("offline", "Save failed"); alert(error.message); }
 }
 
+function releaseReturn(id) { return patchTrip(id, { action: "releaseReturn" }); }
 function changeDriver(id, driver) { return patchTrip(id, { driver }); }
 function changeHelper(id, helperDriver) { return patchTrip(id, { helperDriver }); }
 function advance(id) {
@@ -360,10 +367,15 @@ function collectPayment(id) {
   return patchTrip(id, { action: "collectPayment", paymentMethod });
 }
 function render() {
-  $("dispatchTrips").innerHTML = trips.length ? trips.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No trips yet. Create the first trip above.</div>`;
-  $("driverTrips").innerHTML = trips.length ? trips.map((trip) => tripCard(trip, "driver")).join("") : `<div class="card">No trips assigned to ${esc(session?.driver || "this driver")}.</div>`;
+  const pendingReturns = trips.filter(isPendingReturn);
+  const dispatchedTrips = trips.filter((trip) => !isPendingReturn(trip));
+  $("pendingReturnTrips").innerHTML = pendingReturns.length ? pendingReturns.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No pending returns.</div>`;
+  $("pendingReturnCount").textContent = pendingReturns.length;
+  $("kPendingReturns").textContent = pendingReturns.length;
+  $("dispatchTrips").innerHTML = dispatchedTrips.length ? dispatchedTrips.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No dispatched trips.</div>`;
+  $("driverTrips").innerHTML = dispatchedTrips.length ? dispatchedTrips.map((trip) => tripCard(trip, "driver")).join("") : `<div class="card">No trips assigned to ${esc(session?.driver || "this driver")}.</div>`;
   $("kTotal").textContent = trips.length;
-  $("kScheduled").textContent = trips.filter((trip) => Number(trip.status) < 1).length;
+  $("kScheduled").textContent = dispatchedTrips.filter((trip) => Number(trip.status) < 1).length;
   $("kProgress").textContent = trips.filter((trip) => Number(trip.status) > 0 && Number(trip.status) < 5).length;
   $("kDone").textContent = trips.filter((trip) => Number(trip.status) === 5).length;
 }

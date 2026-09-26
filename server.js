@@ -67,6 +67,7 @@ function normalizeTrip(input) {
   return {
     id: cleanString(input.id, 80), group: cleanString(input.group, 80), leg: cleanString(input.leg, 1),
     label: cleanString(input.label, 60),
+    returnPending: input.returnPending === true && input.leg === "B" && String(input.group || "").startsWith("RT-"),
     patientFirstName, patientLastName,
     patient: patientFirstName && patientLastName ? `${patientFirstName} ${patientLastName}` : cleanString(input.patient, 150),
     phone: cleanString(input.phone, 40),
@@ -189,13 +190,18 @@ app.get("/api/trips", auth, async (req, res, next) => {
   try {
     const result = req.user.role === "dispatch"
       ? await pool.query("SELECT data FROM trips ORDER BY created_at DESC")
-      : await pool.query("SELECT data FROM trips WHERE data->>'driver'=$1 OR data->>'helperDriver'=$1 ORDER BY created_at DESC", [req.user.driver]);
+      : await pool.query("SELECT data FROM trips WHERE (data->>'driver'=$1 OR data->>'helperDriver'=$1) AND data->>'returnPending' IS DISTINCT FROM 'true' ORDER BY created_at DESC", [req.user.driver]);
     res.json({ trips: result.rows.map((row) => row.data) });
   } catch (error) { next(error); }
 });
 
 app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
   const incoming = Array.isArray(req.body?.trips) ? req.body.trips.slice(0, 2).map(normalizeTrip) : [];
+  for (const trip of incoming) {
+    // New R/T return legs are held by Dispatch, regardless of the client's version.
+    trip.returnPending = trip.leg === "B" && trip.group.startsWith("RT-");
+    if (trip.returnPending) trip.status = 0;
+  }
   if (!incoming.length || incoming.some((trip) => !trip.id || !trip.patient ||
       (Boolean(trip.patientFirstName) !== Boolean(trip.patientLastName)) ||
       !trip.pickup.address || !trip.dropoff.address ||
@@ -242,6 +248,10 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "This trip is not assigned to you." });
     }
+    if (trip.returnPending === true && (req.user.role !== "dispatch" || req.body?.action === "advance")) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This return is pending. Dispatch must send it to the driver first." });
+    }
     if (req.user.role === "driver" && ["advance", "collectPayment"].includes(req.body?.action)) {
       const online = await client.query(
         "SELECT 1 FROM driver_locations l JOIN driver_shifts s ON s.driver=l.driver AND s.session_id=l.session_id WHERE l.driver=$1 AND s.session_id=$2 AND s.active AND l.recorded_at > NOW() - INTERVAL '60 seconds'",
@@ -253,7 +263,22 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       }
     }
     const updates = [trip];
-    if (req.body?.action === "advance") {
+    if (req.body?.action === "releaseReturn") {
+      if (req.user.role !== "dispatch") {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Only Dispatch can send a pending return." });
+      }
+      if (trip.returnPending !== true || trip.leg !== "B" || !String(trip.group || "").startsWith("RT-")) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "This trip is not a pending return." });
+      }
+      if (!drivers.includes(trip.driver)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Assign a driver before sending the return." });
+      }
+      trip.returnPending = false;
+      trip.events = [...(trip.events || []), { status: "Return dispatched", time: new Date().toISOString(), by: "Dispatch" }].slice(-20);
+    } else if (req.body?.action === "advance") {
       const status = Number(trip.status || 0);
       if (status >= 5) {
         await client.query("ROLLBACK");
