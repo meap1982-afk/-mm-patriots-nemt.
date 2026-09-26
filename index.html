@@ -56,8 +56,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <p class="small">Drivers appear online while their app sends a current location. Updates about every 10 seconds; positions older than 60 seconds are hidden.</p>
     <div id="driverLocations">Loading locations…</div>
   </div>
-  <div class="card">
-   <div class="topline"><h2 style="margin:0">Create Trip</h2><span class="badge rt">R/T / One Way</span></div>
+  <div class="card" id="tripForm">
+   <div class="topline"><h2 id="tripFormTitle" style="margin:0">Create Trip</h2><span class="badge rt">R/T / One Way</span></div>
    <div class="row">
     <div class="grow"><label>Patient First Name *</label><input id="patientFirstName" autocomplete="given-name" maxlength="75" placeholder="First name"></div>
     <div class="grow"><label>Patient Last Name *</label><input id="patientLastName" autocomplete="family-name" maxlength="75" placeholder="Last name"></div>
@@ -83,7 +83,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Driver</label><select id="aDriver"><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
    <h4 class="address-heading">Pick Up Address *</h4>
-   <div class="row address-fields">
+   <div class="row hidden" id="aPickEditWrap"><div class="grow"><label for="aPickEditAddress">Full address *</label><input id="aPickEditAddress" maxlength="300"></div><div class="grow"><label for="aPickEditRoom">Suite / Apartment / Room #</label><input id="aPickEditRoom" maxlength="80"></div></div>
+   <div class="row address-fields" id="aPickCreateAddress">
     <div class="grow"><label>House / Building Number *</label><input id="aPickNumber" autocomplete="address-line1" placeholder="123 or Building 5"></div>
     <div class="grow street"><label>Street Name *</label><input id="aPickStreet" autocomplete="address-line2" placeholder="Main Street"></div>
     <div class="grow"><label>City *</label><input id="aPickCity" autocomplete="address-level2" placeholder="City"></div>
@@ -92,7 +93,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aPickRoom" placeholder="Optional"></div>
    </div>
    <h4 class="address-heading">Drop-off Address *</h4>
-   <div class="row address-fields">
+   <div class="row hidden" id="aDropEditWrap"><div class="grow"><label for="aDropEditAddress">Full address *</label><input id="aDropEditAddress" maxlength="300"></div><div class="grow"><label for="aDropEditRoom">Suite / Apartment / Room #</label><input id="aDropEditRoom" maxlength="80"></div></div>
+   <div class="row address-fields" id="aDropCreateAddress">
     <div class="grow"><label>House / Building Number *</label><input id="aDropNumber" placeholder="123 or Building 5"></div>
     <div class="grow street"><label>Street Name *</label><input id="aDropStreet" placeholder="Main Street"></div>
     <div class="grow"><label>City *</label><input id="aDropCity" placeholder="City"></div>
@@ -126,7 +128,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Relationship to Patient *</label><input id="payerRelationship" autocomplete="off" maxlength="80" placeholder="e.g. daughter, spouse, friend"></div>
    </div>
    <label>Notes</label><textarea id="notes" rows="3" placeholder="Patient or facility notes"></textarea>
-   <div class="actions"><button class="primary" onclick="createTrip()">Create Trip</button></div>
+   <div class="actions"><button class="primary" id="saveTripButton" onclick="createTrip()">Create Trip</button><button class="ghost hidden" id="cancelEditButton" onclick="cancelTripEdit()">Cancel Edit</button></div>
   </div>
   <h2>Pending Returns <span class="badge" id="pendingReturnCount">0</span></h2>
   <p class="small">R/T returns waiting for Dispatch. Assign a driver and select Dispatch Return when the return is ready.</p>

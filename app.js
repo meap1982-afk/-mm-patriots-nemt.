@@ -6,6 +6,9 @@ let trips = [];
 let drivers = [];
 let session = JSON.parse(localStorage.getItem("mmSession") || "null");
 let polling;
+let editingTripId = null;
+let tripFormSnapshot = null;
+let savingTrip = false;
 let locationTimer;
 let sharingLocation = false;
 let locationOnline = false;
@@ -74,6 +77,7 @@ function openApp() {
 }
 
 function logout() {
+  if (editingTripId) cancelTripEdit();
   stopLocationSharing();
   clearInterval(polling);
   localStorage.removeItem("mmSession");
@@ -235,14 +239,18 @@ function addressLink(location) {
 }
 
 async function createTrip() {
-  const pickup = addressFields("aPick");
-  const dropoff = addressFields("aDrop");
+  if (session?.role !== "dispatch" || savingTrip) return;
+  const editingId = editingTripId;
+  const pickup = editingId ? { room: $("aPickEditRoom").value } : addressFields("aPick");
+  const dropoff = editingId ? { room: $("aDropEditRoom").value } : addressFields("aDrop");
+  const pickupAddress = editingId ? $("aPickEditAddress").value.trim() : addressText(pickup);
+  const dropoffAddress = editingId ? $("aDropEditAddress").value.trim() : addressText(dropoff);
   const firstName = $("patientFirstName").value.trim();
   const lastName = $("patientLastName").value.trim();
   const required = [firstName, lastName, $("phone").value,
-    ...[pickup, dropoff].flatMap(({ number, street, city, state, zip }) => [number, street, city, state, zip])];
+    ...(editingId ? [pickupAddress, dropoffAddress] : [pickup, dropoff].flatMap(({ number, street, city, state, zip }) => [number, street, city, state, zip]))];
   if (required.some((value) => !value.trim())) return alert("Patient first and last name, phone, and all address fields except suite/apartment are required.");
-  if (![pickup, dropoff].every(({ state, zip }) => /^[A-Z]{2}$/.test(state) && /^\d{5}(-\d{4})?$/.test(zip)))
+  if (!editingId && ![pickup, dropoff].every(({ state, zip }) => /^[A-Z]{2}$/.test(state) && /^\d{5}(-\d{4})?$/.test(zip)))
     return alert("Use a two-letter state and a 5-digit ZIP code (or ZIP+4).");
   const hasStairs = $("hasStairs").value;
   const stairsCount = hasStairs === "Yes" ? Number($("stairsCount").value) : 0;
@@ -277,17 +285,28 @@ async function createTrip() {
   };
   const group = `${$("isRT").value === "yes" ? "RT" : "OW"}-${now}`;
   const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: $("isRT").value === "yes" ? "Pick Up" : "One Way", time: $("aTimeType").value === "Will Call" ? "" : $("aTime").value, timeType: $("aTimeType").value, driver: $("aDriver").value,
-    pickup: loc($("aPickType").value, addressText(pickup), pickup.room),
-    dropoff: loc($("aDropType").value, addressText(dropoff), dropoff.room), status: 0, events: [] }];
+    pickup: loc($("aPickType").value, pickupAddress, pickup.room),
+    dropoff: loc($("aDropType").value, dropoffAddress, dropoff.room), status: 0, events: [] }];
   if ($("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", returnPending: true, time: $("bTimeType").value === "Will Call" ? "" : $("bTime").value,
     timeType: $("bTimeType").value, driver: $("bDriver").value,
-    pickup: loc($("aDropType").value, addressText(dropoff), dropoff.room),
-    dropoff: loc($("aPickType").value, addressText(pickup), pickup.room), status: 0, events: [] });
+    pickup: loc($("aDropType").value, dropoffAddress, dropoff.room),
+    dropoff: loc($("aPickType").value, pickupAddress, pickup.room), status: 0, events: [] });
   try {
     setSync("", "Saving…");
-    await api("/trips", { method: "POST", body: JSON.stringify({ trips: newTrips }) });
-    await refreshTrips(); alert($("isRT").value === "yes" ? "Pick Up shared with the driver. Return saved separately in Pending Returns." : "Trip saved and shared with the assigned driver.");
+    savingTrip = true;
+    $("saveTripButton").disabled = true;
+    if (editingId) {
+      await api(`/trips/${encodeURIComponent(editingId)}`, { method: "PATCH", body: JSON.stringify({ action: "edit", trip: newTrips[0] }) });
+      cancelTripEdit();
+      await refreshTrips();
+      alert("Trip updated. Only this leg was changed.");
+    } else {
+      await api("/trips", { method: "POST", body: JSON.stringify({ trips: newTrips }) });
+      await refreshTrips();
+      alert($("isRT").value === "yes" ? "Pick Up shared with the driver. Return saved separately in Pending Returns." : "Trip saved and shared with the assigned driver.");
+    }
   } catch (error) { setSync("offline", "Save failed"); alert(error.message); }
+  finally { savingTrip = false; $("saveTripButton").disabled = false; }
 }
 
 function esc(value) {
@@ -336,6 +355,7 @@ function tripCard(t, mode) {
     <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Private Payment Due: $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Private Payment Due: NO"}</div>
     ${t.payerType === "NoPay" ? `<div class="step">No Pay</div>` : t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
+    ${mode === "dispatch" ? `<div class="actions"><button class="ghost" onclick="editTrip('${esc(t.id)}')">EDIT TRIP</button><button class="danger" onclick="deleteTrip('${esc(t.id)}')">DELETE TRIP</button></div>` : ""}
     ${mode === "dispatch" && pendingReturn ? `<div class="actions"><button class="primary" onclick="releaseReturn('${esc(t.id)}')" ${drivers.includes(t.driver) ? "" : "disabled"}>DISPATCH RETURN</button></div><p class="small">${drivers.includes(t.driver) ? "Held in Pending Returns until you dispatch it." : "Assign a driver to dispatch this return."}</p>` : ""}
     ${mode === "driver" && dialLink ? `<div class="actions"><a class="ghost call-patient" href="${esc(dialLink)}" aria-label="Call ${esc(t.patient || "patient")}">📞 CALL PATIENT</a></div>` : ""}
     ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
@@ -348,6 +368,95 @@ function tripCard(t, mode) {
 async function patchTrip(id, body) {
   try { setSync("", "Saving…"); await api(`/trips/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }); await refreshTrips(); }
   catch (error) { setSync("offline", "Save failed"); alert(error.message); }
+}
+
+const billingFormFields = ["payment", "payerType", "patientAmount", "paymentByPhone", "payerFirstName", "payerLastName", "payerRelationship"];
+
+function setFormValue(id, value) {
+  const field = $(id);
+  const text = String(value ?? "");
+  if (field.tagName === "SELECT" && ![...field.options].some(option => option.value === text)) {
+    field.add(new Option(text || "Not specified", text));
+  }
+  field.value = text;
+}
+
+function editTrip(id) {
+  if (session?.role !== "dispatch" || savingTrip) return;
+  const trip = trips.find(item => item.id === id);
+  if (!trip) return;
+  if (editingTripId && !confirm("Discard the current edit and open this trip?")) return;
+  if (!tripFormSnapshot) tripFormSnapshot = [...$("tripForm").querySelectorAll("input, select, textarea")].map(field => ({ id: field.id, value: field.value, disabled: field.disabled }));
+  editingTripId = id;
+  const nameParts = String(trip.patient || "").trim().split(/\s+/);
+  const fields = {
+    patientFirstName: trip.patientFirstName || nameParts[0] || "",
+    patientLastName: trip.patientLastName || nameParts.slice(1).join(" "),
+    phone: trip.phone, weight: trip.weight, tripType: trip.type,
+    needsWheelchair: trip.needsWheelchair || (["Wheelchair", "Bariatric Wheelchair"].includes(trip.type) ? "Yes" : "No"),
+    needsOxygen: trip.needsOxygen || "No", hasCompanion: trip.hasCompanion || "No",
+    hasStairs: trip.hasStairs || "No", stairsCount: trip.stairsCount || "",
+    isRT: "no", twoMen: trip.twoMen || "No", needsHelper: trip.needsHelper || "No",
+    helperDriver: trip.helperDriver || "Unassigned",
+    aTimeType: trip.timeType === "Will Call" || !trip.time ? "Will Call" : "Scheduled", aTime: trip.time || "",
+    aDriver: trip.driver || "Unassigned", aPickType: trip.pickup?.type || "Other", aDropType: trip.dropoff?.type || "Other",
+    aPickEditAddress: trip.pickup?.address, aPickEditRoom: trip.pickup?.room,
+    aDropEditAddress: trip.dropoff?.address, aDropEditRoom: trip.dropoff?.room,
+    payment: trip.payment, payStatus: trip.payStatus || "Pending",
+    payerType: trip.payerType || (trip.patientPays === "Yes" ? "Patient" : "NoPay"),
+    patientAmount: trip.patientAmount || 0, paymentByPhone: trip.paymentByPhone || "No",
+    payerFirstName: trip.payerFirstName, payerLastName: trip.payerLastName, payerRelationship: trip.payerRelationship,
+    auth: trip.auth, notes: trip.notes
+  };
+  Object.entries(fields).forEach(([field, value]) => setFormValue(field, value));
+  $("isRT").disabled = true;
+  $("payStatus").disabled = true;
+  billingFormFields.forEach(field => { $(field).disabled = trip.paymentCollected === true; });
+  syncTripForm();
+  $("tripFormTitle").textContent = `Edit ${trip.leg === "B" ? "Return" : String(trip.group || "").startsWith("RT-") ? "Pick Up" : "Trip"}`;
+  $("outboundHeading").textContent = trip.leg === "B" ? "Return" : "Pick Up";
+  $("saveTripButton").textContent = "Save Changes";
+  $("cancelEditButton").classList.remove("hidden");
+  for (const leg of ["aPick", "aDrop"]) {
+    $(`${leg}CreateAddress`).classList.add("hidden");
+    $(`${leg}EditWrap`).classList.remove("hidden");
+  }
+  $("tripForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("patientFirstName").focus({ preventScroll: true });
+}
+
+function syncTripForm() {
+  updateTripService(); updatePickupTime("a"); updatePickupTime("b"); updatePayerFields();
+  $("helperDriverWrap").classList.toggle("hidden", $("needsHelper").value !== "Yes");
+  $("stairsCountWrap").classList.toggle("hidden", $("hasStairs").value !== "Yes");
+}
+
+function cancelTripEdit() {
+  editingTripId = null;
+  if (tripFormSnapshot) for (const field of tripFormSnapshot) {
+    $(field.id).value = field.value; $(field.id).disabled = field.disabled;
+  }
+  tripFormSnapshot = null;
+  $("tripFormTitle").textContent = "Create Trip";
+  $("saveTripButton").textContent = "Create Trip";
+  $("cancelEditButton").classList.add("hidden");
+  for (const leg of ["aPick", "aDrop"]) {
+    $(`${leg}CreateAddress`).classList.remove("hidden");
+    $(`${leg}EditWrap`).classList.add("hidden");
+  }
+  syncTripForm();
+}
+
+async function deleteTrip(id) {
+  if (session?.role !== "dispatch" || savingTrip) return;
+  const trip = trips.find(item => item.id === id);
+  if (!trip || !confirm(`Delete ${trip.leg === "B" ? "Return" : "Pick Up"} for ${trip.patient}? Only this trip leg will be deleted. This cannot be undone.`)) return;
+  try {
+    setSync("", "Deleting…");
+    await api(`/trips/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (editingTripId === id) cancelTripEdit();
+    await refreshTrips();
+  } catch (error) { setSync("offline", "Delete failed"); alert(error.message); }
 }
 
 function releaseReturn(id) { return patchTrip(id, { action: "releaseReturn" }); }

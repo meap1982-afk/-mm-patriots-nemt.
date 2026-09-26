@@ -102,6 +102,16 @@ collectedAt: cleanString(input.collectedAt, 100),
   };
 }
 
+function invalidTripDetails(trip) {
+  return !trip.id || !trip.patient ||
+    (Boolean(trip.patientFirstName) !== Boolean(trip.patientLastName)) ||
+    !trip.pickup.address || !trip.dropoff.address ||
+    (trip.timeType === "Scheduled" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(trip.time)) ||
+    (trip.hasStairs === "Yes" && trip.stairsCount < 1) ||
+    (trip.patientPays === "Yes" && (!trip.payerType || !trip.payerFirstName || !trip.payerLastName ||
+      (trip.payerType === "Other" && !trip.payerRelationship)));
+}
+
 app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "200kb" }));
@@ -202,13 +212,7 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
     trip.returnPending = trip.leg === "B" && trip.group.startsWith("RT-");
     if (trip.returnPending) trip.status = 0;
   }
-  if (!incoming.length || incoming.some((trip) => !trip.id || !trip.patient ||
-      (Boolean(trip.patientFirstName) !== Boolean(trip.patientLastName)) ||
-      !trip.pickup.address || !trip.dropoff.address ||
-      (trip.timeType === "Scheduled" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(trip.time)) ||
-      (trip.hasStairs === "Yes" && trip.stairsCount < 1) ||
-      (trip.patientPays === "Yes" && (!trip.payerType || !trip.payerFirstName || !trip.payerLastName ||
-        (trip.payerType === "Other" && !trip.payerRelationship))))) {
+  if (!incoming.length || incoming.some(invalidTripDetails)) {
     return res.status(400).json({ error: "Required trip information is missing." });
   }
   const client = await pool.connect();
@@ -223,7 +227,17 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
   finally { client.release(); }
 });
 
+app.delete("/api/trips/:id", auth, dispatchOnly, async (req, res, next) => {
+  try {
+    const result = await pool.query("DELETE FROM trips WHERE id=$1 RETURNING id", [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: "Trip not found." });
+    res.json({ ok: true, id: req.params.id });
+  } catch (error) { next(error); }
+});
+
 app.patch("/api/trips/:id", auth, async (req, res, next) => {
+  if (req.body?.action === "edit" && req.user.role !== "dispatch")
+    return res.status(403).json({ error: "Only Dispatch can edit trips." });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -263,7 +277,29 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       }
     }
     const updates = [trip];
-    if (req.body?.action === "releaseReturn") {
+    if (req.body?.action === "edit") {
+      const input = req.body.trip;
+      if (!input || typeof input !== "object" || Array.isArray(input)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Trip details are required." });
+      }
+      const fields = ["patientFirstName", "patientLastName", "phone", "weight", "type", "needsWheelchair", "needsOxygen",
+        "hasStairs", "stairsCount", "hasCompanion", "twoMen", "needsHelper", "helperDriver", "driver",
+        "time", "timeType", "pickup", "dropoff", "auth", "notes"];
+      if (!trip.paymentCollected) fields.push("payment", "patientPays", "payerType", "patientAmount", "paymentByPhone",
+        "payerFirstName", "payerLastName", "payerRelationship");
+      const changes = {};
+      for (const key of fields) {
+        if (Object.prototype.hasOwnProperty.call(input, key)) changes[key] = input[key];
+      }
+      const edited = normalizeTrip({ ...trip, ...changes });
+      if (invalidTripDetails(edited)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Required trip information is missing or invalid." });
+      }
+      Object.assign(trip, edited);
+      trip.events = [...(trip.events || []), { status: "Trip edited", time: new Date().toISOString(), by: "Dispatch" }].slice(-20);
+    } else if (req.body?.action === "releaseReturn") {
       if (req.user.role !== "dispatch") {
         await client.query("ROLLBACK");
         return res.status(403).json({ error: "Only Dispatch can send a pending return." });
