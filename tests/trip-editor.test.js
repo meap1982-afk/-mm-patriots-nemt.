@@ -43,6 +43,7 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   assert.equal(fields.get('aPickEditRoom').value, '4');
   assert.equal(fields.get('tripType').value, 'Bariatric Wheelchair');
   assert.equal(fields.get('isRT').disabled, true);
+  assert.equal(fields.get('isRT').value, 'yes');
   assert.equal(fields.get('returnFields').classList.contains('hidden'), true);
   fields.get('notes').value = 'Changed return';
   await vm.runInContext('createTrip()', context);

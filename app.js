@@ -264,7 +264,7 @@ async function createTrip() {
   const payerRelationship = patientPays !== "Yes" ? "" : payerType === "Other" ? $("payerRelationship").value.trim() : "Self";
   if (payerType === "Other" && (!payerFirstName || !payerLastName || !payerRelationship))
     return alert("Enter the name and relationship of the other person making the payment.");
-  for (const leg of ($("isRT").value === "yes" ? ["a", "b"] : ["a"])) {
+  for (const leg of (!editingId && $("isRT").value === "yes" ? ["a", "b"] : ["a"])) {
     if ($(`${leg}TimeType`).value === "Scheduled" && !/^([01]\d|2[0-3]):[0-5]\d$/.test($(`${leg}Time`).value))
       return alert("Choose a pick up time or select Patient will call.");
   }
@@ -287,7 +287,7 @@ async function createTrip() {
   const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: $("isRT").value === "yes" ? "Pick Up" : "One Way", time: $("aTimeType").value === "Will Call" ? "" : $("aTime").value, timeType: $("aTimeType").value, driver: $("aDriver").value,
     pickup: loc($("aPickType").value, pickupAddress, pickup.room),
     dropoff: loc($("aDropType").value, dropoffAddress, dropoff.room), status: 0, events: [] }];
-  if ($("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", returnPending: true, time: $("bTimeType").value === "Will Call" ? "" : $("bTime").value,
+  if (!editingId && $("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", returnPending: true, time: $("bTimeType").value === "Will Call" ? "" : $("bTime").value,
     timeType: $("bTimeType").value, driver: $("bDriver").value,
     pickup: loc($("aDropType").value, dropoffAddress, dropoff.room),
     dropoff: loc($("aPickType").value, pickupAddress, pickup.room), status: 0, events: [] });
@@ -396,7 +396,7 @@ function editTrip(id) {
     needsWheelchair: trip.needsWheelchair || (["Wheelchair", "Bariatric Wheelchair"].includes(trip.type) ? "Yes" : "No"),
     needsOxygen: trip.needsOxygen || "No", hasCompanion: trip.hasCompanion || "No",
     hasStairs: trip.hasStairs || "No", stairsCount: trip.stairsCount || "",
-    isRT: "no", twoMen: trip.twoMen || "No", needsHelper: trip.needsHelper || "No",
+    isRT: String(trip.group || "").startsWith("RT-") ? "yes" : "no", twoMen: trip.twoMen || "No", needsHelper: trip.needsHelper || "No",
     helperDriver: trip.helperDriver || "Unassigned",
     aTimeType: trip.timeType === "Will Call" || !trip.time ? "Will Call" : "Scheduled", aTime: trip.time || "",
     aDriver: trip.driver || "Unassigned", aPickType: trip.pickup?.type || "Other", aDropType: trip.dropoff?.type || "Other",
@@ -501,7 +501,7 @@ for (const leg of ["a", "b"]) {
 
 function updateTripService() {
   const oneWay = $("isRT").value === "no";
-  $("returnFields").classList.toggle("hidden", oneWay);
+  $("returnFields").classList.toggle("hidden", oneWay || Boolean(editingTripId));
   $("outboundHeading").textContent = oneWay ? "One Way" : "Pick Up";
 }
 $("isRT").addEventListener("change", updateTripService);
