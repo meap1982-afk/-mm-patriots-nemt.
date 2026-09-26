@@ -115,14 +115,17 @@ function addressLink(location) {
 async function createTrip() {
   const pickup = addressFields("aPick");
   const dropoff = addressFields("aDrop");
-  const required = [$("patient").value, $("phone").value,
+  const firstName = $("patientFirstName").value.trim();
+  const lastName = $("patientLastName").value.trim();
+  const required = [firstName, lastName, $("phone").value,
     ...[pickup, dropoff].flatMap(({ number, street, city, state, zip }) => [number, street, city, state, zip])];
-  if (required.some((value) => !value.trim())) return alert("Patient, phone, and all address fields except suite/apartment are required.");
+  if (required.some((value) => !value.trim())) return alert("Patient first and last name, phone, and all address fields except suite/apartment are required.");
   if (![pickup, dropoff].every(({ state, zip }) => /^[A-Z]{2}$/.test(state) && /^\d{5}(-\d{4})?$/.test(zip)))
     return alert("Use a two-letter state and a 5-digit ZIP code (or ZIP+4).");
   const now = Date.now();
   const base = {
-    patient: $("patient").value, phone: $("phone").value, weight: Number($("weight").value || 0), type: $("tripType").value,
+    patientFirstName: firstName, patientLastName: lastName, patient: `${firstName} ${lastName}`,
+    phone: $("phone").value, weight: Number($("weight").value || 0), type: $("tripType").value,
     twoMen: $("twoMen").value, needsHelper: $("needsHelper").value,
     helperDriver: $("needsHelper").value === "Yes" ? $("helperDriver").value : "",
     payment: $("payment").value, payStatus: $("payStatus").value, patientPays: $("patientPays").value,
