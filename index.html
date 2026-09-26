@@ -97,6 +97,16 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aPickRoom" placeholder="Optional"></div>
    </div>
    <h4 class="address-heading">Drop-off Address *</h4>
+   <div id="returnFields">
+    <h3>Return</h3>
+    <p class="small">The return will be saved separately in Pending Returns. Dispatch sends it to the driver when ready.</p>
+    <div class="row">
+     <div class="grow"><label for="bDate">Return Date *</label><input id="bDate" type="date" required></div>
+     <div class="grow"><label for="bTimeType">Return Pick Up Time *</label><select id="bTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
+     <div class="grow" id="bTimeWrap"><label for="bTime">Scheduled Return Time *</label><input id="bTime" type="time" value="12:30"></div>
+     <div class="grow"><label>Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
+    </div>
+   </div>
    <div class="row">
     <div class="grow"><label for="aDropType">Drop-off Location Type</label><select id="aDropType"><option>Home</option><option selected>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
    </div>
@@ -108,16 +118,6 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>State *</label><input id="aDropState" maxlength="2" placeholder="VA"></div>
     <div class="grow"><label>ZIP Code *</label><input id="aDropZip" inputmode="numeric" maxlength="10" placeholder="20164"></div>
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aDropRoom" placeholder="Optional"></div>
-   </div>
-   <div id="returnFields">
-    <h3>Return</h3>
-    <p class="small">The return will be saved separately in Pending Returns. Dispatch sends it to the driver when ready.</p>
-    <div class="row">
-     <div class="grow"><label for="bDate">Return Date *</label><input id="bDate" type="date" required></div>
-     <div class="grow"><label for="bTimeType">Return Pick Up Time *</label><select id="bTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
-     <div class="grow" id="bTimeWrap"><label for="bTime">Scheduled Return Time *</label><input id="bTime" type="time" value="12:30"></div>
-     <div class="grow"><label>Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
-    </div>
    </div>
    <div class="row">
     <div class="grow"><label>Payment Method</label><select id="payment"><option>Insurance / Broker</option><option>Private Pay</option><option>Credit / Debit Card</option><option>Cash</option><option>Check</option><option>Facility / Hospital</option><option>Invoice / Billing</option><option>Other</option></select></div>
