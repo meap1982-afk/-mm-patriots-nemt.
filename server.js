@@ -57,7 +57,7 @@ function normalizeTrip(input) {
     label: cleanString(input.label, 60), patient: cleanString(input.patient, 150), phone: cleanString(input.phone, 40),
     weight: Math.max(0, Number(input.weight || 0)), type: cleanString(input.type, 40), twoMen: cleanString(input.twoMen, 5),
     needsHelper: cleanString(input.needsHelper, 5), helperDriver: cleanString(input.helperDriver, 100),
-    paymentSource: paymentSource: cleanString(input.paymentSource, 30),
+    paymentSource: cleanString(input.paymentSource, 30),
 collection: cleanString(input.collection, 20),
 paymentMethod: cleanString(input.paymentMethod, 20),
 patientAmount: Math.max(0, Number(input.patientAmount || 0)),
@@ -119,46 +119,94 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
 });
 
 app.patch("/api/trips/:id", auth, async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const found = await pool.query("SELECT data FROM trips WHERE id=$1", [req.params.id]);
-    if (!found.rowCount) return res.status(404).json({ error: "Trip not found." });
-    const trip = found.rows[0].data;
+    await client.query("BEGIN");
+    const initial = await client.query("SELECT data FROM trips WHERE id=$1", [req.params.id]);
+    if (!initial.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Trip not found." });
+    }
+    const group = initial.rows[0].data.group;
+    const locked = group
+      ? await client.query("SELECT id, data FROM trips WHERE data->>'group'=$1 ORDER BY id FOR UPDATE", [group])
+      : await client.query("SELECT id, data FROM trips WHERE id=$1 FOR UPDATE", [req.params.id]);
+    const rows = locked.rows;
+    const row = rows.find((item) => item.id === req.params.id);
+    if (!row) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Trip not found." });
+    }
+    const trip = row.data;
     const assigned = trip.driver === req.user.driver || trip.helperDriver === req.user.driver;
-    if (req.user.role !== "dispatch" && !assigned) return res.status(403).json({ error: "This trip is not assigned to you." });
-
+    if (req.user.role !== "dispatch" && !assigned) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "This trip is not assigned to you." });
+    }
+    const updates = [trip];
     if (req.body?.action === "advance") {
-      if (trip.status < 3) {        const labels = ["Assigned","Arrived","Pick Up","Completed"];        trip.events = [...(trip.events || []), { status: labels[trip.status], time: new Date().toISOString(), by: req.user.driver || "Dispatch" }].slice(-20);
+      const status = Number(trip.status || 0);
+      if (status >= 5) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Trip is already completed." });
       }
+      if (trip.leg === "B" && String(trip.group || "").startsWith("RT-") &&
+          trip.patientPays === "Yes" && !trip.paymentCollected && status === 4) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Collect the R/T payment before completing the return trip." });
+      }
+      const labels = ["Assigned", "Accepted", "Arrived at Pickup", "Patient Picked Up", "Arrived at Destination", "Completed"];
+      trip.status = status + 1;
+      trip.events = [...(trip.events || []), {
+        status: labels[trip.status], time: new Date().toISOString(), by: req.user.driver || "Dispatch"
+      }].slice(-20);
     } else if (req.body?.action === "collectPayment") {
-  if (trip.patientPays !== "Yes")
-    return res.status(400).json({ error: "No patient payment is due." });
-
-  const method = cleanString(req.body?.paymentMethod, 20);
-  const allowedMethods = ["Cash", "Check", "Credit Card"];
-
-  if (!allowedMethods.includes(method))
-    return res.status(400).json({ error: "Select Cash, Check, or Credit Card." });
-
-  trip.paymentCollected = true;
-  trip.payStatus = "Paid";
-  trip.paymentMethod = method;
-  trip.collectedBy = req.user.driver || "Dispatch";
-  trip.collectedAt = new Date().toISOString();
-} else if (req.user.role === "dispatch") {
-  if (Object.prototype.hasOwnProperty.call(req.body, "driver"))
-    trip.driver = cleanString(req.body.driver, 100);
-
-  if (Object.prototype.hasOwnProperty.call(req.body, "helperDriver"))
-    trip.helperDriver = cleanString(req.body.helperDriver, 100);
-
-} else {
-  return res.status(400).json({ error: "Unsupported update." });
-}
-
-const updated = normalizeTrip(trip);
-await pool.query("UPDATE trips SET data=$2, updated_at=NOW() WHERE id=$1", [req.params.id, updated]);
-res.json({ trip: updated });
-  } catch (error) { next(error); }
+      if (trip.patientPays !== "Yes") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "No patient payment is due." });
+      }
+      if (rows.some((item) => item.data.paymentCollected)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Payment has already been recorded for this trip." });
+      }
+      const method = cleanString(req.body?.paymentMethod, 20);
+      if (!["Cash", "Check", "Credit Card"].includes(method)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Select Cash, Check, or Credit Card." });
+      }
+      const collectedAt = new Date().toISOString();
+      for (const item of rows) {
+        if (item.data.patientPays !== "Yes") continue;
+        item.data.paymentCollected = true;
+        item.data.payStatus = "Paid";
+        item.data.paymentMethod = method;
+        item.data.collectedBy = req.user.driver || "Dispatch";
+        item.data.collectedAt = collectedAt;
+        if (item.data !== trip) updates.push(item.data);
+      }
+    } else if (req.user.role === "dispatch") {
+      if (Object.prototype.hasOwnProperty.call(req.body, "driver"))
+        trip.driver = cleanString(req.body.driver, 100);
+      if (Object.prototype.hasOwnProperty.call(req.body, "helperDriver"))
+        trip.helperDriver = cleanString(req.body.helperDriver, 100);
+    } else {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Unsupported update." });
+    }
+    let updated;
+    for (const item of updates) {
+      const normalized = normalizeTrip(item);
+      await client.query("UPDATE trips SET data=$2, updated_at=NOW() WHERE id=$1", [normalized.id, normalized]);
+      if (item.id === trip.id) updated = normalized;
+    }
+    await client.query("COMMIT");
+    res.json({ trip: updated });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    next(error);
+  } finally {
+    client.release();
+  }
 });
 
 app.use(express.static(path.join(__dirname), { extensions: ["html"] }));
