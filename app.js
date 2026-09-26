@@ -10,13 +10,16 @@ let locationTimer;
 let sharingLocation = false;
 let locationOnline = false;
 let sendingLocation = false;
+let lastLocationUpdate = 0;
+const nativeLocation = () => window.webkit?.messageHandlers?.driverLocation;
 
 async function api(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+  const requestToken = session?.token;
+  if (requestToken) headers.Authorization = `Bearer ${requestToken}`;
   const response = await fetch(`/api${path}`, { ...options, headers });
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401 && path !== "/login") logout();
+  if (response.status === 401 && path !== "/login" && session?.token === requestToken) logout();
   if (!response.ok) throw new Error(data.error || "Request failed.");
   return data;
 }
@@ -60,6 +63,11 @@ function openApp() {
   if (session.role === "dispatch") refreshDriverLocations();
   clearInterval(polling);
   polling = setInterval(() => {
+    if (locationOnline && Date.now() - lastLocationUpdate > 60000) {
+      locationOnline = false;
+      locationMessage("Location overdue · waiting for a fresh GPS update");
+      render();
+    }
     refreshTrips();
     if (session?.role === "dispatch") refreshDriverLocations();
   }, 5000);
@@ -107,10 +115,11 @@ async function refreshDriverLocations() {
     const data = await api("/driver-locations");
     const locations = data.locations || [];
     $("driverLocations").innerHTML = locations.length ? locations.map((item) => {
+      if (item.latitude == null) return `<div class="step current"><b>${esc(item.driver)}</b> · Checked in · waiting for required location</div>`;
       const latitude = Number(item.latitude);
       const longitude = Number(item.longitude);
       const url = `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`;
-      return `<div class="step ${item.current ? "done" : "current"}">📍 <b>${esc(item.driver)}</b> · ${item.current ? "Live" : "Last known (stale)"} · updated ${esc(displayDate(item.updated_at))}
+      return `<div class="step ${item.current ? "done" : "current"}">📍 <b>${esc(item.driver)}</b> · ${item.current ? "Live" : "Last known (stale)"} · GPS ${esc(displayDate(item.recorded_at))} · received ${esc(displayDate(item.updated_at))}
         · accuracy ~${Math.round(Number(item.accuracy))} m
         · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View on map</a></div>`;
     }).join("") : '<div class="step">No drivers sharing a recent location.</div>';
@@ -126,27 +135,27 @@ function locationMessage(message) {
 }
 
 async function sendLocation() {
-  if (!sharingLocation || sendingLocation || document.visibilityState === "hidden") return;
+  if (nativeLocation() || !sharingLocation || sendingLocation || document.visibilityState === "hidden") return;
   sendingLocation = true;
+  const locationToken = session?.token;
   try {
     if (!navigator.geolocation) throw new Error("Location is unavailable on this device.");
     const position = await new Promise((resolve, reject) =>
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: true, timeout: 15000, maximumAge: 10000
       }));
-    if (!sharingLocation) return;
+    if (!sharingLocation || session?.token !== locationToken) return;
     await api("/driver-location", { method: "POST", body: JSON.stringify({
       latitude: position.coords.latitude, longitude: position.coords.longitude,
-      accuracy: position.coords.accuracy
+      accuracy: position.coords.accuracy, recordedAt: new Date(position.timestamp).toISOString()
     }) });
-    if (!sharingLocation) {
-      await api("/driver-location", { method: "DELETE" });
-      return;
-    }
+    if (!sharingLocation || session?.token !== locationToken) return;
+    lastLocationUpdate = position.timestamp;
     locationOnline = true;
     locationMessage(`Online · location updated ${new Date().toLocaleTimeString()}`);
     render();
   } catch (error) {
+    if (session?.token !== locationToken || !sharingLocation) return;
     locationOnline = false;
     locationMessage(`Offline · location unavailable: ${error.message}`);
     render();
@@ -187,6 +196,7 @@ function stopLocationSharing() {
 window.nativeLocationState = (online, message) => {
   if (session?.role !== "driver" || !sharingLocation) return;
   locationOnline = online === true;
+  if (locationOnline) lastLocationUpdate = Date.now();
   locationMessage(message || (locationOnline ? "Online · background location active" : "Offline · location unavailable"));
   render();
 };
@@ -197,7 +207,10 @@ function toggleLocationSharing() {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (sharingLocation && document.visibilityState === "visible") sendLocation();
+  if (sharingLocation && document.visibilityState === "visible") {
+    if (nativeLocation()) nativeLocation().postMessage({ action: "refresh" });
+    else sendLocation();
+  }
 });
 
 function loc(type, address, room) { return { type, address, room }; }

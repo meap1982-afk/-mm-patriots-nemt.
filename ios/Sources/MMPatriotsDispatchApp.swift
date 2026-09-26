@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 import CoreLocation
 import UIKit
+import Security
 
 @main
 struct MMPatriotsDispatchApp: App {
@@ -24,7 +25,7 @@ struct ContentView: View {
 
     private var configuredURL: URL? {
         guard let url = URL(string: serverURL),
-              url.scheme == "https", url.host != nil,
+              url.scheme == "https", url.host != nil, url.user == nil, url.password == nil,
               (url.path.isEmpty || url.path == "/"),
               url.query == nil, url.fragment == nil else { return nil }
         return url
@@ -41,8 +42,20 @@ struct ContentView: View {
                         location.checkOut()
                         serverURL = ""
                     }
+                    .disabled(location.active)
                 }
                 .padding(10)
+                if location.active || location.status.contains("pending") {
+                    HStack {
+                        Text(location.status).font(.caption)
+                        Spacer()
+                        Button("Settings") {
+                            if let settings = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(settings)
+                            }
+                        }
+                    }.padding(10)
+                }
                 WebContainer(baseURL: url, location: location)
             }
         } else {
@@ -55,7 +68,7 @@ struct ContentView: View {
                     Button("Connect") {
                         let value = enteredURL.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard let url = URL(string: value), url.scheme == "https",
-                              url.host != nil, (url.path.isEmpty || url.path == "/"),
+                              url.host != nil, url.user == nil, url.password == nil, (url.path.isEmpty || url.path == "/"),
                               url.query == nil, url.fragment == nil else {
                             error = "Enter the HTTPS address of your Dispatch server."
                             return
@@ -90,6 +103,7 @@ struct WebContainer: UIViewRepresentable {
         context.coordinator.webView = webView
         location.webView = webView
         location.baseURL = baseURL
+        webView.navigationDelegate = context.coordinator
         webView.load(URLRequest(url: baseURL))
         return webView
     }
@@ -100,7 +114,7 @@ struct WebContainer: UIViewRepresentable {
         view.configuration.userContentController.removeScriptMessageHandler(forName: "driverLocation")
     }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let baseURL: URL
         let location: DriverLocationService
         weak var webView: WKWebView?
@@ -110,10 +124,22 @@ struct WebContainer: UIViewRepresentable {
             self.location = location
         }
 
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+            if url.scheme == baseURL.scheme && url.host == baseURL.host && url.port == baseURL.port {
+                decisionHandler(.allow)
+            } else {
+                decisionHandler(.cancel)
+                if ["https", "tel", "maps"].contains(url.scheme ?? "") { UIApplication.shared.open(url) }
+            }
+        }
+
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.frameInfo.isMainFrame,
                   message.frameInfo.request.url?.scheme == "https",
                   message.frameInfo.request.url?.host == baseURL.host,
+                  message.frameInfo.request.url?.port == baseURL.port,
                   let body = message.body as? [String: Any],
                   let action = body["action"] as? String else { return }
             switch action {
@@ -121,6 +147,8 @@ struct WebContainer: UIViewRepresentable {
                 guard let token = body["token"] as? String,
                       let driver = body["driver"] as? String else { return }
                 location.checkIn(token: token, driver: driver)
+            case "refresh":
+                location.refresh()
             case "checkOut":
                 location.checkOut()
             default:
@@ -130,144 +158,244 @@ struct WebContainer: UIViewRepresentable {
     }
 }
 
+// Core Location owns the background lifetime; JavaScript timers never drive native GPS.
 final class DriverLocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
     weak var webView: WKWebView?
     var baseURL: URL?
+    @Published private(set) var active = false
+    @Published private(set) var status = "Checked out"
     private let manager = CLLocationManager()
     private var token: String?
-    private var driver: String?
-    private var active = false
-    private var sending = false
+    private var expiresAt = Date.distantPast
+    private var upload: URLSessionDataTask?
+    private var generation = UUID()
+    private var lastSent = Date.distantPast
+    private var lastAcknowledged = Date.distantPast
+    private var maintenance: Timer?
+    private var deleting = false
+    private let pendingKey: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "com.mmpatriots.dispatch.pending-checkouts",
+        kSecAttrAccount as String: "pending"
+    ]
+    private struct PendingCheckout: Codable, Equatable {
+        let server: URL
+        let token: String
+    }
+    private var pending: [PendingCheckout] = []
 
     override init() {
         super.init()
+        var query = pendingKey
+        query[kSecReturnData as String] = true
+        var result: CFTypeRef?
+        if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+           let data = result as? Data {
+            pending = (try? JSONDecoder().decode([PendingCheckout].self, from: data)) ?? []
+        }
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 15
+        // Receive fresh stationary fixes too; throttle uploads instead of filtering movement.
+        manager.distanceFilter = kCLDistanceFilterNone
         manager.activityType = .automotiveNavigation
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = true
+        maintenance = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.maintain()
+        }
+        retryCheckout()
     }
 
     func checkIn(token: String, driver: String) {
-        guard !token.isEmpty, !driver.isEmpty, baseURL != nil else {
-            report(false, "Offline · server connection unavailable")
-            return
-        }
-        if active && self.token == token && self.driver == driver { return }
+        guard !token.isEmpty, !driver.isEmpty, baseURL != nil else { return }
+        if active && self.token == token { refresh(); return }
         if active { checkOut() }
-        self.token = token
-        self.driver = driver
-        active = true
-        report(false, "Requesting iPhone location permission…")
-        switch manager.authorizationStatus {
-        case .notDetermined, .authorizedWhenInUse:
-            manager.requestAlwaysAuthorization()
-            if manager.authorizationStatus == .authorizedWhenInUse { startUpdates() }
-        case .authorizedAlways:
-            startUpdates()
-        default:
-            report(false, "Offline · allow location in iPhone Settings")
+        // Read expiry only for local shutdown; the server verifies the signature.
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { report(false, "Invalid session · check in again"); return }
+        var payload = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
+        guard let data = Data(base64Encoded: payload),
+              let claims = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let expiry = claims["exp"] as? Double, expiry > Date().timeIntervalSince1970 else {
+            report(false, "Session expired · check in again"); return
         }
+        self.token = token
+        expiresAt = Date(timeIntervalSince1970: expiry)
+        generation = UUID()
+        active = true
+        lastSent = .distantPast
+        lastAcknowledged = .distantPast
+        refresh()
     }
 
     func refresh() {
-        if active { manager.requestLocation() }
-    }
-
-    func checkOut() {
-        let oldToken = token
-        active = false
-        sending = false
-        manager.stopUpdatingLocation()
-        manager.allowsBackgroundLocationUpdates = false
-        token = nil
-        driver = nil
-        report(false, "Checked out · location sharing stopped")
-        if let oldToken { deleteLocation(token: oldToken) }
-    }
-
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        retryCheckout()
         guard active else { return }
+        guard Date() < expiresAt else { checkOut(); return }
+        if manager.authorizationStatus != .authorizedAlways || manager.accuracyAuthorization != .fullAccuracy {
+            generation = UUID()
+            upload?.cancel()
+            upload = nil
+            lastAcknowledged = .distantPast
+        }
         switch manager.authorizationStatus {
-        case .authorizedAlways, .authorizedWhenInUse:
-            startUpdates()
+        case .notDetermined:
+            report(false, "Location required · allow While Using, then Always")
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse:
+            manager.stopUpdatingLocation()
+            manager.allowsBackgroundLocationUpdates = false
+            report(false, "Location required · choose Always in Settings")
+            manager.requestAlwaysAuthorization()
+        case .authorizedAlways:
+            guard manager.accuracyAuthorization == .fullAccuracy else {
+                manager.stopUpdatingLocation()
+                manager.allowsBackgroundLocationUpdates = false
+                report(false, "Location required · enable Precise Location in Settings")
+                return
+            }
+            manager.allowsBackgroundLocationUpdates = true
+            manager.startUpdatingLocation()
+            report(Date().timeIntervalSince(lastAcknowledged) < 60,
+                   Date().timeIntervalSince(lastAcknowledged) < 60 ? "Online · background location active" : "Waiting for a fresh GPS update")
         default:
             manager.stopUpdatingLocation()
-            report(false, "Offline · location permission required")
+            manager.allowsBackgroundLocationUpdates = false
+            report(false, "Location required · allow Always and Precise Location in Settings")
         }
     }
 
-    private func startUpdates() {
-        guard active else { return }
-        manager.allowsBackgroundLocationUpdates = true
-        manager.startUpdatingLocation()
+    func checkOut() {
+        if let token, let baseURL {
+            let item = PendingCheckout(server: baseURL, token: token)
+            if !pending.contains(item) { pending.append(item); persistPending() }
+        }
+        active = false
+        generation = UUID()
+        upload?.cancel()
+        upload = nil
+        manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
+        token = nil
+        lastAcknowledged = .distantPast
+        report(false, "Checked out · GPS stopped")
+        retryCheckout()
     }
 
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) { refresh() }
+
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard active, !sending,
-              let current = locations.last,
-              current.horizontalAccuracy >= 0,
-              abs(current.timestamp.timeIntervalSinceNow) < 120 else { return }
+        maintain()
+        guard active, manager.authorizationStatus == .authorizedAlways,
+              manager.accuracyAuthorization == .fullAccuracy, upload == nil,
+              Date().timeIntervalSince(lastSent) >= 10,
+              let current = locations.last, current.horizontalAccuracy >= 0,
+              abs(current.timestamp.timeIntervalSinceNow) < 30 else { return }
         send(current)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        report(false, "Offline · location update failed")
+        if active { report(false, "Location unavailable · waiting for GPS or permission") }
+    }
+
+    private func maintain() {
+        retryCheckout()
+        guard active else { return }
+        if Date() >= expiresAt { checkOut(); return }
+        if manager.authorizationStatus == .authorizedAlways && manager.accuracyAuthorization == .fullAccuracy && Date().timeIntervalSince(lastAcknowledged) >= 60 {
+            report(false, "Location required · no recent update delivered")
+        }
     }
 
     private func send(_ position: CLLocation) {
         guard let baseURL, let token else { return }
-        sending = true
+        let currentGeneration = generation
+        lastSent = Date()
         var request = URLRequest(url: baseURL.appendingPathComponent("api/driver-location"))
         request.httpMethod = "POST"
+        request.timeoutInterval = 20
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: [
             "latitude": position.coordinate.latitude,
             "longitude": position.coordinate.longitude,
-            "accuracy": position.horizontalAccuracy
+            "accuracy": position.horizontalAccuracy,
+            "recordedAt": ISO8601DateFormatter().string(from: position.timestamp)
         ])
-        let task = UIApplication.shared.beginBackgroundTask(withName: "Send Driver Location")
+        let lease = BackgroundLease("Send Driver Location")
+        upload = URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+            DispatchQueue.main.async {
+                defer { lease.end() }
+                guard let self, self.active, self.generation == currentGeneration else { return }
+                self.upload = nil
+                if error == nil, (response as? HTTPURLResponse)?.statusCode == 200 {
+                    self.lastAcknowledged = position.timestamp
+                    self.report(Date().timeIntervalSince(position.timestamp) < 60, "Online · background location active")
+                } else if [401, 403].contains((response as? HTTPURLResponse)?.statusCode ?? 0) {
+                    self.checkOut()
+                    self.report(false, "Session ended · check out and sign in again")
+                } else {
+                    self.report(false, "Offline · cannot deliver location to Dispatch")
+                }
+            }
+        }
+        upload?.resume()
+    }
+
+    private func persistPending() {
+        guard let data = try? JSONEncoder().encode(pending) else { return }
+        let values: [String: Any] = [kSecValueData as String: data]
+        if SecItemUpdate(pendingKey as CFDictionary, values as CFDictionary) == errSecItemNotFound {
+            var query = pendingKey
+            query[kSecValueData as String] = data
+            query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            SecItemAdd(query as CFDictionary, nil)
+        }
+    }
+
+    private func retryCheckout() {
+        guard !deleting, let item = pending.first else { return }
+        deleting = true
+        var request = URLRequest(url: item.server.appendingPathComponent("api/driver-location"))
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 15
+        request.setValue("Bearer \(item.token)", forHTTPHeaderField: "Authorization")
+        let lease = BackgroundLease("Stop Driver Location")
         URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
             DispatchQueue.main.async {
-                guard let self else {
-                    UIApplication.shared.endBackgroundTask(task)
-                    return
+                defer { lease.end() }
+                guard let self else { return }
+                self.deleting = false
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if error == nil && (code == 200 || code == 401) {
+                    self.pending.removeAll { $0 == item }
+                    self.persistPending()
+                } else if !self.active {
+                    self.report(false, "GPS stopped · Dispatch checkout pending network")
                 }
-                self.sending = false
-                if self.active && self.token == token {
-                    if error == nil, let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                        self.report(true, "Online · background location active")
-                    } else if (response as? HTTPURLResponse)?.statusCode == 401 {
-                        self.checkOut()
-                        self.report(false, "Offline · session expired; check in again")
-                    } else {
-                        self.report(false, "Offline · location cannot reach Dispatch")
-                    }
-                } else {
-                    self.deleteLocation(token: token)
-                }
-                UIApplication.shared.endBackgroundTask(task)
             }
         }.resume()
     }
 
-    private func deleteLocation(token: String) {
-        guard let baseURL else { return }
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/driver-location"))
-        request.httpMethod = "DELETE"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let task = UIApplication.shared.beginBackgroundTask(withName: "Stop Driver Location")
-        URLSession.shared.dataTask(with: request) { _, _, _ in
-            UIApplication.shared.endBackgroundTask(task)
-        }.resume()
-    }
-
     private func report(_ online: Bool, _ message: String) {
+        status = message
         guard let webView,
               let json = try? JSONSerialization.data(withJSONObject: [online, message]),
               let argument = String(data: json, encoding: .utf8) else { return }
         webView.evaluateJavaScript("window.nativeLocationState?.apply(null, \(argument))")
+    }
+}
+
+// End each finite network allowance on completion or expiration, exactly once.
+private final class BackgroundLease {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+    init(_ name: String) {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in self?.end() }
+    }
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
     }
 }

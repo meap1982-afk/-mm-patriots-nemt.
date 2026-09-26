@@ -105,55 +105,83 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "200kb" }));
 app.use("/api/login", rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
 
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.get("/api/health", async (_req, res) => {
+  try {
+    // Readiness includes the database and the shift schema required by GPS.
+    await pool.query("SELECT 1 FROM driver_shifts LIMIT 1");
+    res.json({ ok: true, version: "driver-location-v1", commit: process.env.RAILWAY_GIT_COMMIT_SHA || null });
+  } catch {
+    res.status(503).json({ ok: false });
+  }
+});
 app.get("/api/config", (_req, res) => res.json({ drivers }));
 
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res, next) => {
   const role = req.body?.role === "dispatch" ? "dispatch" : "driver";
   const driver = cleanString(req.body?.driver, 100);
   const valid = role === "dispatch" ? safeEqual(req.body?.code, dispatchCode)
     : drivers.includes(driver) && safeEqual(req.body?.code, driverAccessCodes[driver]);
   if (!valid || (role === "driver" && !drivers.includes(driver))) return res.status(401).json({ error: "Invalid access code." });
-  const token = jwt.sign({ role, driver: role === "driver" ? driver : "" }, jwtSecret, { algorithm: "HS256", expiresIn: "12h" });
+  const sid = crypto.randomUUID();
+  try {
+    if (role === "driver") await pool.query("INSERT INTO driver_shifts (driver, session_id, active, expires_at) VALUES ($1,$2,true,NOW() + INTERVAL '12 hours') ON CONFLICT (driver) DO UPDATE SET session_id=$2, active=true, expires_at=NOW() + INTERVAL '12 hours'", [driver, sid]);
+  } catch (error) { return next(error); }
+  const token = jwt.sign({ sid, role, driver: role === "driver" ? driver : "" }, jwtSecret, { algorithm: "HS256", expiresIn: "12h" });
   res.json({ token, role, driver: role === "driver" ? driver : "" });
 });
 
-// Only Dispatch can read recent positions. Drivers explicitly start and stop sharing.
+// A shift row serializes uploads and checkout, including requests already in flight.
 app.get("/api/driver-locations", auth, dispatchOnly, async (_req, res, next) => {
   try {
-    const result = await pool.query(
-      "SELECT driver, latitude, longitude, accuracy, updated_at, (updated_at > NOW() - INTERVAL '60 seconds') AS current FROM driver_locations WHERE updated_at > NOW() - INTERVAL '24 hours' ORDER BY driver"
-    );
+    const result = await pool.query(`SELECT s.driver, l.latitude, l.longitude, l.accuracy,
+      l.updated_at, l.recorded_at, (l.recorded_at > NOW() - INTERVAL '60 seconds') AS current
+      FROM driver_shifts s LEFT JOIN driver_locations l
+      ON l.driver=s.driver AND l.session_id=s.session_id
+      WHERE s.active AND s.expires_at > NOW() ORDER BY s.driver`);
     res.json({ locations: result.rows });
   } catch (error) { next(error); }
 });
 
 app.post("/api/driver-location", auth, async (req, res, next) => {
-  if (req.user.role !== "driver" || !drivers.includes(req.user.driver))
-    return res.status(403).json({ error: "Driver access required." });
-  const latitude = Number(req.body?.latitude);
-  const longitude = Number(req.body?.longitude);
-  const accuracy = Number(req.body?.accuracy);
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
-      !Number.isFinite(longitude) || longitude < -180 || longitude > 180 ||
-      !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100000)
-    return res.status(400).json({ error: "Invalid location." });
+  if (req.user.role !== "driver" || !req.user.sid || !drivers.includes(req.user.driver))
+    return res.status(403).json({ error: "Check in again." });
+  const { latitude, longitude, accuracy, recordedAt } = req.body || {};
+  const timestamp = Date.parse(recordedAt);
+  if (typeof latitude !== "number" || !Number.isFinite(latitude) || Math.abs(latitude) > 90 ||
+      typeof longitude !== "number" || !Number.isFinite(longitude) || Math.abs(longitude) > 180 ||
+      typeof accuracy !== "number" || !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100000 ||
+      !Number.isFinite(timestamp) || timestamp > Date.now() + 10000 || timestamp < Date.now() - 60000)
+    return res.status(400).json({ error: "A fresh, valid location is required." });
+  const client = await pool.connect();
   try {
-    await pool.query(
-      "INSERT INTO driver_locations (driver, latitude, longitude, accuracy, updated_at) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (driver) DO UPDATE SET latitude=$2, longitude=$3, accuracy=$4, updated_at=NOW()",
-      [req.user.driver, latitude, longitude, accuracy]
-    );
+    await client.query("BEGIN");
+    const shift = await client.query("SELECT 1 FROM driver_shifts WHERE driver=$1 AND session_id=$2 AND active FOR UPDATE", [req.user.driver, req.user.sid]);
+    if (!shift.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(401).json({ error: "Shift ended. Check in again." });
+    }
+    await client.query(`INSERT INTO driver_locations (driver, latitude, longitude, accuracy, recorded_at, session_id, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,NOW()) ON CONFLICT (driver) DO UPDATE SET
+      latitude=$2, longitude=$3, accuracy=$4, recorded_at=$5, session_id=$6, updated_at=NOW()
+      WHERE driver_locations.session_id IS DISTINCT FROM $6 OR driver_locations.recorded_at <= $5`,
+      [req.user.driver, latitude, longitude, accuracy, new Date(timestamp), req.user.sid]);
+    await client.query("COMMIT");
     res.json({ ok: true });
-  } catch (error) { next(error); }
+  } catch (error) { await client.query("ROLLBACK"); next(error); }
+  finally { client.release(); }
 });
 
 app.delete("/api/driver-location", auth, async (req, res, next) => {
-  if (req.user.role !== "driver")
-    return res.status(403).json({ error: "Driver access required." });
+  if (req.user.role !== "driver") return res.status(403).json({ error: "Driver access required." });
+  const client = await pool.connect();
   try {
-    await pool.query("DELETE FROM driver_locations WHERE driver=$1", [req.user.driver]);
+    await client.query("BEGIN");
+    await client.query("UPDATE driver_shifts SET active=false WHERE driver=$1 AND session_id=$2", [req.user.driver, req.user.sid]);
+    await client.query("DELETE FROM driver_locations WHERE driver=$1 AND session_id=$2", [req.user.driver, req.user.sid]);
+    await client.query("COMMIT");
     res.json({ ok: true });
-  } catch (error) { next(error); }
+  } catch (error) { await client.query("ROLLBACK"); next(error); }
+  finally { client.release(); }
 });
 
 app.get("/api/trips", auth, async (req, res, next) => {
@@ -214,8 +242,8 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
     }
     if (req.user.role === "driver" && ["advance", "collectPayment"].includes(req.body?.action)) {
       const online = await client.query(
-        "SELECT 1 FROM driver_locations WHERE driver=$1 AND updated_at > NOW() - INTERVAL '60 seconds'",
-        [req.user.driver]
+        "SELECT 1 FROM driver_locations l JOIN driver_shifts s ON s.driver=l.driver AND s.session_id=l.session_id WHERE l.driver=$1 AND s.session_id=$2 AND s.active AND l.recorded_at > NOW() - INTERVAL '60 seconds'",
+        [req.user.driver, req.user.sid]
       );
       if (!online.rowCount) {
         await client.query("ROLLBACK");
@@ -288,7 +316,12 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
   }
 });
 
-app.use(express.static(path.join(__dirname), { extensions: ["html"] }));
+const publicFiles = new Set(["/", "/index.html", "/app.js", "/logo.jpeg", "/manifest.json", "/service-worker.js", "/support.html"]);
+app.use((req, res, next) => {
+  if (!publicFiles.has(req.path)) return next();
+  if (["/", "/index.html", "/app.js", "/service-worker.js"].includes(req.path)) res.set("Cache-Control", "no-cache");
+  res.sendFile(path.join(__dirname, req.path === "/" ? "index.html" : req.path.slice(1)));
+});
 app.get(/.*/, (_req, res) => res.sendFile(path.join(__dirname, "index.html")));
 app.use((error, _req, res, _next) => { console.error(error); res.status(500).json({ error: "Server error. Please try again." }); });
 
@@ -306,7 +339,13 @@ async function start() {
     accuracy DOUBLE PRECISION NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
-  app.listen(port, () => console.log(`M&M Patriots NEMT listening on ${port}`));
+  await pool.query("ALTER TABLE driver_locations ADD COLUMN IF NOT EXISTS recorded_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS session_id TEXT");
+  await pool.query(`CREATE TABLE IF NOT EXISTS driver_shifts (
+    driver TEXT PRIMARY KEY, session_id TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT false,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  return app.listen(port, () => console.log(`M&M Patriots NEMT listening on ${port}`));
 }
 
-start().catch((error) => { console.error(error); process.exit(1); });
+if (require.main === module) start().catch((error) => { console.error(error); process.exit(1); });
+module.exports = { app, start };
