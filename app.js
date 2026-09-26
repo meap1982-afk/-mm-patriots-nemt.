@@ -126,15 +126,24 @@ async function createTrip() {
   const stairsCount = hasStairs === "Yes" ? Number($("stairsCount").value) : 0;
   if (hasStairs === "Yes" && (!Number.isInteger(stairsCount) || stairsCount < 1 || stairsCount > 999))
     return alert("Enter the number of steps (1–999) when Has Stairs is Yes.");
+  const patientPays = $("patientPays").value;
+  const payerType = patientPays === "Yes" ? $("payerType").value : "";
+  const paymentByPhone = patientPays === "Yes" ? $("paymentByPhone").value : "";
+  const payerFirstName = patientPays !== "Yes" ? "" : payerType === "Other" ? $("payerFirstName").value.trim() : firstName;
+  const payerLastName = patientPays !== "Yes" ? "" : payerType === "Other" ? $("payerLastName").value.trim() : lastName;
+  const payerRelationship = patientPays !== "Yes" ? "" : payerType === "Other" ? $("payerRelationship").value.trim() : "Self";
+  if (payerType === "Other" && (!payerFirstName || !payerLastName || !payerRelationship))
+    return alert("Enter the name and relationship of the other person making the payment.");
   const now = Date.now();
   const base = {
     patientFirstName: firstName, patientLastName: lastName, patient: `${firstName} ${lastName}`,
     phone: $("phone").value, weight: Number($("weight").value || 0), type: $("tripType").value,
     needsWheelchair: $("needsWheelchair").value, needsOxygen: $("needsOxygen").value,
-    hasStairs, stairsCount,
+    hasStairs, stairsCount, hasCompanion: $("hasCompanion").value,
     twoMen: $("twoMen").value, needsHelper: $("needsHelper").value,
     helperDriver: $("needsHelper").value === "Yes" ? $("helperDriver").value : "",
-    payment: $("payment").value, payStatus: $("payStatus").value, patientPays: $("patientPays").value,
+    payment: $("payment").value, payStatus: $("payStatus").value, patientPays,
+    payerType, payerFirstName, payerLastName, payerRelationship, paymentByPhone,
     patientAmount: Number($("patientAmount").value || 0), paymentCollected: $("patientPays").value === "Yes" && $("payStatus").value === "Paid",
     collectedBy: $("patientPays").value === "Yes" && $("payStatus").value === "Paid" ? "Dispatch" : "",
     collectedAt: $("patientPays").value === "Yes" && $("payStatus").value === "Paid" ? new Date().toISOString() : "",
@@ -179,6 +188,9 @@ function tripCard(t, mode) {
   const needsWheelchair = t.needsWheelchair === "Yes" || (t.needsWheelchair == null && t.type === "Wheelchair");
   const needsOxygen = t.needsOxygen === "Yes";
   const stairs = t.hasStairs === "Yes" ? `YES — ${Number(t.stairsCount) > 0 ? `${Number(t.stairsCount)} steps` : "count not specified"}` : t.hasStairs === "No" ? "NO" : "Not specified";
+  const companion = t.hasCompanion === "Yes" ? "YES" : t.hasCompanion === "No" ? "NO" : "Not specified";
+  const payerName = [t.payerFirstName, t.payerLastName].filter(Boolean).join(" ") || "Not specified";
+  const phonePayment = t.paymentByPhone === "Yes" ? "YES" : t.paymentByPhone === "No" ? "NO" : "Not specified";
   const dialLink = phoneDialLink(t.phone);
   const options = [...drivers, "Unassigned"].map((name) => `<option ${name === t.driver ? "selected" : ""}>${esc(name)}</option>`).join("");
   const helperOptions = [...drivers, "Unassigned"].map((name) => `<option ${name === t.helperDriver ? "selected" : ""}>${esc(name)}</option>`).join("");
@@ -188,8 +200,10 @@ function tripCard(t, mode) {
     <div><b>${esc(t.time || "Will Call")} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
     <div class="step ${needsWheelchair || needsOxygen ? "current" : ""}">♿ Need Wheelchair: <b>${needsWheelchair ? "YES" : "NO"}</b><br>Need Oxygen: <b>${needsOxygen ? "YES" : "NO"}</b></div>
     <div class="step ${t.hasStairs === "Yes" ? "current" : ""}">Stairs: <b>${stairs}</b></div>
+    <div class="step ${t.hasCompanion === "Yes" ? "current" : ""}">Companion: <b>${companion}</b></div>
     ${t.needsHelper === "Yes" ? `<div class="meta">🧑‍🤝‍🧑 <b>Helper Driver:</b> ${esc(t.helperDriver || "Unassigned")}</div>` : ""}
-    <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Patient Pays: YES — $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Patient Pays: NO"}</div>
+    <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Private Payment Due: $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Private Payment Due: NO"}</div>
+    ${t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
     ${mode === "driver" && dialLink ? `<div class="actions"><a class="ghost call-patient" href="${esc(dialLink)}" aria-label="Call ${esc(t.patient || "patient")}">📞 CALL PATIENT</a></div>` : ""}
     ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')">RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
@@ -232,6 +246,14 @@ function updateTripService() {
 $("isRT").addEventListener("change", updateTripService);
 updateTripService();
 $("needsHelper").addEventListener("change", () => $("helperDriverWrap").classList.toggle("hidden", $("needsHelper").value !== "Yes"));
+function updatePayerFields() {
+  const patientPays = $("patientPays").value === "Yes";
+  $("payerFields").classList.toggle("hidden", !patientPays);
+  $("payerNameFields").classList.toggle("hidden", !patientPays || $("payerType").value !== "Other");
+}
+$("patientPays").addEventListener("change", updatePayerFields);
+$("payerType").addEventListener("change", updatePayerFields);
+updatePayerFields();
 $("hasStairs").addEventListener("change", () => $("stairsCountWrap").classList.toggle("hidden", $("hasStairs").value !== "Yes"));
 $("tripType").addEventListener("change", () => { $("needsWheelchair").value = $("tripType").value === "Wheelchair" ? "Yes" : "No"; });
 $("helperDriverWrap").classList.add("hidden");
