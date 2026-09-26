@@ -135,7 +135,7 @@ async function createTrip() {
     auth: $("auth").value, notes: $("notes").value, created: now
   };
   const group = `${$("isRT").value === "yes" ? "RT" : "OW"}-${now}`;
-  const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: "Pickup / Outbound", time: $("aTime").value, driver: $("aDriver").value,
+  const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: "Pick Up", time: $("aTime").value, driver: $("aDriver").value,
     pickup: loc($("aPickType").value, addressText(pickup), pickup.room),
     dropoff: loc($("aDropType").value, addressText(dropoff), dropoff.room), status: 0, events: [] }];
   if ($("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", time: $("bTime").value,
@@ -165,7 +165,7 @@ function tripCard(t, mode) {
   const helperOptions = [...drivers, "Unassigned"].map((name) => `<option ${name === t.helperDriver ? "selected" : ""}>${esc(name)}</option>`).join("");
   const next = Number(t.status) < 5 ? steps[Number(t.status) + 1] : "Completed";
   return `<div class="card trip ${t.leg === "B" ? "return" : ""}">
-    <div class="topline"><h3>Trip ${esc(t.leg)} — ${esc(t.label)}</h3><span class="badge ${t.leg === "B" ? "rt" : ""}">${String(t.group).startsWith("RT-") ? "R/T" : "One Way"}</span></div>
+    <div class="topline"><h3>${t.leg === "B" ? "Return" : "Pick Up"}</h3><span class="badge ${t.leg === "B" ? "rt" : ""}">${String(t.group).startsWith("RT-") ? "R/T" : "One Way"}</span></div>
     <div><b>${esc(t.time || "Will Call")} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
     ${t.needsHelper === "Yes" ? `<div class="meta">🧑‍🤝‍🧑 <b>Helper Driver:</b> ${esc(t.helperDriver || "Unassigned")}</div>` : ""}
     <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Patient Pays: YES — $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Patient Pays: NO"}</div>
