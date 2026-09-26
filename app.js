@@ -210,7 +210,7 @@ function updateNotificationView() {
   button.hidden = !driver;
   button.className = unreadNotificationCount > 0 ? "danger" : "success";
   button.ariaExpanded = String(driverInboxOpen);
-  button.ariaLabel = `Notificación nueva: ${unreadNotificationCount} sin leer`;
+  button.ariaLabel = `New Notification: ${unreadNotificationCount} unread`;
   $("driverNotifications").hidden = driver && !driverInboxOpen;
 }
 function toggleDriverNotifications() {
