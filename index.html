@@ -36,7 +36,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
   <input id="accessCode" type="password" inputmode="text" autocomplete="current-password" placeholder="Driver PIN / Dispatch code">
   <select id="loginDriver" aria-label="Driver"></select>
   <button class="primary" onclick="enter('dispatch')">Dispatch Login</button>
-  <button class="danger" onclick="enter('driver')">Driver Login</button>
+  <button class="danger" onclick="enter('driver')">Driver Check In</button>
   <p id="loginMessage" style="opacity:.85;font-size:12px">Shared beta — sign in to continue.</p>
  </div>
 </section>
@@ -130,11 +130,11 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
  </section>
 
  <section id="driver" class="hidden">
-  <div class="card"><div class="topline"><div><h2 style="margin:0">My Trips</h2><div id="driverName" class="small">Driver</div></div><button class="ghost" onclick="logout()">Log Out</button></div></div>
+  <div class="card"><div class="topline"><div><h2 style="margin:0">My Trips</h2><div id="driverName" class="small">Driver</div></div><button class="ghost" onclick="logout()">Check Out</button></div></div>
   <div class="card">
     <h3>My Location</h3>
-    <p class="small">Location is required to be online and update trips. Keep the app open and allow location permission. You can go offline at any time.</p>
-    <button id="shareLocation" class="primary" onclick="toggleLocationSharing()">Go Online</button>
+    <p class="small">Checking in starts required location sharing with Dispatch. If a recent location is unavailable, trip updates and payment recording are blocked. Check out when your shift ends.</p>
+    <button id="shareLocation" class="primary" onclick="toggleLocationSharing()">Check Out</button>
     <div id="locationStatus" class="small" role="status">Offline · location sharing is off.</div>
   </div>
   <div id="driverTrips"></div>
