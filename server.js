@@ -52,9 +52,14 @@ function cleanString(value, max = 500) {
 
 function normalizeTrip(input) {
   const status = Math.max(0, Math.min(5, Number(input.status || 0)));
+  const patientFirstName = cleanString(input.patientFirstName, 75);
+  const patientLastName = cleanString(input.patientLastName, 75);
   return {
     id: cleanString(input.id, 80), group: cleanString(input.group, 80), leg: cleanString(input.leg, 1),
-    label: cleanString(input.label, 60), patient: cleanString(input.patient, 150), phone: cleanString(input.phone, 40),
+    label: cleanString(input.label, 60),
+    patientFirstName, patientLastName,
+    patient: patientFirstName && patientLastName ? `${patientFirstName} ${patientLastName}` : cleanString(input.patient, 150),
+    phone: cleanString(input.phone, 40),
     weight: Math.max(0, Number(input.weight || 0)), type: cleanString(input.type, 40), twoMen: cleanString(input.twoMen, 5),
     needsHelper: cleanString(input.needsHelper, 5), helperDriver: cleanString(input.helperDriver, 100),
     paymentSource: cleanString(input.paymentSource, 30),
@@ -103,7 +108,9 @@ app.get("/api/trips", auth, async (req, res, next) => {
 
 app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
   const incoming = Array.isArray(req.body?.trips) ? req.body.trips.slice(0, 2).map(normalizeTrip) : [];
-  if (!incoming.length || incoming.some((trip) => !trip.id || !trip.patient || !trip.pickup.address || !trip.dropoff.address)) {
+  if (!incoming.length || incoming.some((trip) => !trip.id || !trip.patient ||
+      (Boolean(trip.patientFirstName) !== Boolean(trip.patientLastName)) ||
+      !trip.pickup.address || !trip.dropoff.address)) {
     return res.status(400).json({ error: "Required trip information is missing." });
   }
   const client = await pool.connect();
