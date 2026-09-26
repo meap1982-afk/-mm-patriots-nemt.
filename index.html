@@ -39,6 +39,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
 .trip.return{background:#fff7ed;border-left-color:#c2410c}
 .trip.return .topline h3{color:#9a3412}
 .trip .meta{color:#475569}
+.payment-panel{background:#f0fdf4;border-color:#86efac;border-left-color:#15803d}
+.payment-panel label{color:#166534}
 </style>
 </head>
 <body>
@@ -106,7 +108,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>ZIP Code *</label><input id="aPickZip" inputmode="numeric" autocomplete="postal-code" maxlength="10" placeholder="20164"></div>
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aPickRoom" placeholder="Optional"></div>
    </div>
-   <div class="row">
+   <div class="row leg-panel pickup-panel">
     <div class="grow"><label for="aDriver">Pick Up Driver</label><select id="aDriver"><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
    <h4 class="address-heading">Drop-off Address *</h4>
@@ -131,22 +133,22 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>ZIP Code *</label><input id="aDropZip" inputmode="numeric" maxlength="10" placeholder="20164"></div>
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aDropRoom" placeholder="Optional"></div>
    </div>
-   <div class="row">
+   <div class="row leg-panel payment-panel">
     <div class="grow"><label>Payment Method</label><select id="payment"><option>Insurance / Broker</option><option>Private Pay</option><option>Credit / Debit Card</option><option>Cash</option><option>Check</option><option>Facility / Hospital</option><option>Invoice / Billing</option><option>Other</option></select></div>
     <div class="grow"><label>Payment Status</label><select id="payStatus"><option>Pending</option><option>Paid</option><option>Invoice</option></select></div>
     <input id="patientPays" type="hidden" value="No">
     <div class="grow hidden" id="patientAmountWrap"><label>Patient Amount Due</label><input id="patientAmount" type="number" min="0" step="0.01" value="0.00" placeholder="$0.00"></div>
    <div class="grow"><label>Authorization / Confirmation #</label><input id="auth" placeholder="Optional"></div>
    </div>
-   <div class="row" id="payerFields">
+   <div class="row leg-panel payment-panel" id="payerFields">
     <div class="grow"><label>Who Will Pay?</label><select id="payerType"><option value="Patient">Patient Pays</option><option value="Other">Another Person Pays</option><option value="NoPay" selected>No Pay</option></select></div>
     <div class="grow hidden" id="paymentByPhoneWrap"><label>Payment by Phone?</label><select id="paymentByPhone"><option>No</option><option>Yes</option></select></div>
    </div>
    <div class="row leg-panel return-panel" id="returnDriverWrap">
      <div class="grow"><label for="bDriver">Return Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
-   <div class="row hidden" id="payerPhoneWrap"><div class="grow"><label for="payerPhone">Payer Phone (optional)</label><input id="payerPhone" type="tel" autocomplete="tel" maxlength="40" placeholder="Phone number of the person paying"></div></div>
-   <div class="row hidden" id="payerNameFields">
+   <div class="row leg-panel payment-panel hidden" id="payerPhoneWrap"><div class="grow"><label for="payerPhone">Payer Phone (optional)</label><input id="payerPhone" type="tel" autocomplete="tel" maxlength="40" placeholder="Phone number of the person paying"></div></div>
+   <div class="row leg-panel payment-panel hidden" id="payerNameFields">
     <div class="grow"><label>Payer First Name *</label><input id="payerFirstName" autocomplete="off" maxlength="75" placeholder="First name"></div>
     <div class="grow"><label>Payer Last Name *</label><input id="payerLastName" autocomplete="off" maxlength="75" placeholder="Last name"></div>
     <div class="grow"><label>Relationship to Patient *</label><input id="payerRelationship" autocomplete="off" maxlength="80" placeholder="e.g. daughter, spouse, friend"></div>
