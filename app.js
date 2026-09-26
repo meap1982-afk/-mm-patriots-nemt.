@@ -574,7 +574,12 @@ function editTrip(id) {
   $("patientFirstName").focus({ preventScroll: true });
 }
 
+function updateTripFormVisibility() {
+  $("tripForm").hidden = tripFolder === "pending" && !editingTripId;
+}
+
 function syncTripForm() {
+  updateTripFormVisibility();
   updateTripService(); updatePickupTime("a"); updatePickupTime("b"); updatePayerFields();
   $("helperDriverWrap").classList.toggle("hidden", $("needsHelper").value !== "Yes");
   $("stairsCountWrap").classList.toggle("hidden", $("hasStairs").value !== "Yes");
@@ -644,6 +649,7 @@ function selectTripFolder(folder) {
   render();
 }
 function render() {
+  updateTripFormVisibility();
   if (session?.role === "driver") {
     const available = trips.filter(trip => !trip.cancelled && !isPendingReturn(trip) && Number(trip.status || 0) < 5).sort(compareTripSchedule);
     const current = available.filter(trip => Number(trip.status || 0) > 0);

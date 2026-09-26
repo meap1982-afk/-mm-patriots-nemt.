@@ -37,8 +37,11 @@ test('Dispatch edits only the selected return, cancels to the original form, and
     driver: 'Test Driver', type: 'Bariatric Wheelchair', payerType: 'Other', patientPays: 'Yes', payerFirstName: 'Pay', payerLastName: 'Person', payerRelationship: 'Friend', payerPhone: '+1 (555) 555-0123', timeType: 'Will Call',
     pickup: { type: 'Hospital', address: '123 Hospital Road, Town, VA 20164', room: '4' },
     dropoff: { type: 'Home', address: '456 Home Road, Town, VA 20164' }, dispatchNotes: 'Private before', notes: 'Before' };
-  vm.runInContext(`session = {role: 'dispatch', token: 'test'}; trips = [${JSON.stringify(original)}]; editTrip('return-b')`, context);
+  vm.runInContext(`session = {role: 'dispatch', token: 'test'}; tripFolder = 'pending'; trips = [${JSON.stringify(original)}]; editTrip('return-b')`, context);
   assert.equal(fields.get('tripFormTitle').textContent, 'Edit Return');
+  assert.equal(fields.get('tripForm').hidden, false);
+  vm.runInContext('render()', context);
+  assert.equal(fields.get('tripForm').hidden, false);
   assert.equal(fields.get('aPickEditAddress').value, original.pickup.address);
   assert.equal(fields.get('aPickEditRoom').value, '4');
   assert.equal(fields.get('tripType').value, 'Bariatric Wheelchair');
@@ -65,6 +68,7 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   assert.ok(!calls.some(c => c.method === 'POST'));
   assert.equal(fields.get('patientFirstName').value, 'Unsaved draft');
   assert.equal(fields.get('tripFormTitle').textContent, 'Create Trip');
+  assert.equal(fields.get('tripForm').hidden, true);
   assert.equal(fields.get('isRT').disabled, false);
   vm.runInContext(`trips = [${JSON.stringify(original)}]`, context);
   await vm.runInContext("deleteTrip('return-b')", context);

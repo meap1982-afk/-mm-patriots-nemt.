@@ -73,6 +73,7 @@ test('Pending collects returns across all dates and removes released or cancelle
   for(let i=0;i<4;i++)assert.match(elements.get('pendingReturnTrips').innerHTML,new RegExp('ReturnPatient'+i));
   assert.doesNotMatch(elements.get('pendingReturnTrips').innerHTML,/PickupPatient/);
   assert.equal(elements.get('dispatchTrips').hidden,true);
+  assert.equal(elements.get('tripForm').hidden,true);
   assert.equal(elements.get('kPendingReturns').textContent,4);
   vm.runInContext('trips[0].returnPending=false;trips[1].cancelled=true;render()',context);
   assert.match(elements.get('tripFolderNav').innerHTML,/Pending \(2\)/);
@@ -80,6 +81,7 @@ test('Pending collects returns across all dates and removes released or cancelle
   vm.runInContext('selectTripFolder("past")',context);
   assert.match(elements.get('dispatchTrips').innerHTML,/ReturnPatient0/);
   assert.equal(elements.get('dispatchTrips').hidden,false);
+  assert.equal(elements.get('tripForm').hidden,false);
   vm.runInContext('session={role:"driver"};selectTripFolder("pending")',context);
   assert.equal(vm.runInContext('tripFolder',context),'past');
 });
