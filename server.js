@@ -57,9 +57,16 @@ function normalizeTrip(input) {
     label: cleanString(input.label, 60), patient: cleanString(input.patient, 150), phone: cleanString(input.phone, 40),
     weight: Math.max(0, Number(input.weight || 0)), type: cleanString(input.type, 40), twoMen: cleanString(input.twoMen, 5),
     needsHelper: cleanString(input.needsHelper, 5), helperDriver: cleanString(input.helperDriver, 100),
-    payment: cleanString(input.payment, 80), payStatus: cleanString(input.payStatus, 30), patientPays: cleanString(input.patientPays, 5),
-    patientAmount: Math.max(0, Number(input.patientAmount || 0)), paymentCollected: Boolean(input.paymentCollected),
-    collectedBy: cleanString(input.collectedBy, 100), collectedAt: cleanString(input.collectedAt, 100),
+    paymentSource: paymentSource: cleanString(input.paymentSource, 30),
+collection: cleanString(input.collection, 20),
+paymentMethod: cleanString(input.paymentMethod, 20),
+patientAmount: Math.max(0, Number(input.patientAmount || 0)),
+paymentCollected: Boolean(input.paymentCollected),
+payment: cleanString(input.payment, 80),
+payStatus: cleanString(input.payStatus, 30),
+patientPays: cleanString(input.patientPays, 5),
+collectedBy: cleanString(input.collectedBy, 100),
+collectedAt: cleanString(input.collectedAt, 100),
     auth: cleanString(input.auth, 150), notes: cleanString(input.notes, 1500), created: Number(input.created || Date.now()),
     time: cleanString(input.time, 30), timeType: cleanString(input.timeType, 30), driver: cleanString(input.driver, 100),
     pickup: { type: cleanString(input.pickup?.type, 60), address: cleanString(input.pickup?.address, 300), room: cleanString(input.pickup?.room, 80) },
@@ -120,22 +127,37 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
     if (req.user.role !== "dispatch" && !assigned) return res.status(403).json({ error: "This trip is not assigned to you." });
 
     if (req.body?.action === "advance") {
-      if (trip.status < 5) {
-        trip.status += 1;
-        const labels = ["Assigned","Accepted","Arrived at Pickup","Patient Picked Up","Arrived at Destination","Completed"];
-        trip.events = [...(trip.events || []), { status: labels[trip.status], time: new Date().toISOString(), by: req.user.driver || "Dispatch" }].slice(-20);
+      if (trip.status < 3) {        const labels = ["Assigned","Arrived","Pick Up","Completed"];        trip.events = [...(trip.events || []), { status: labels[trip.status], time: new Date().toISOString(), by: req.user.driver || "Dispatch" }].slice(-20);
       }
     } else if (req.body?.action === "collectPayment") {
-      if (trip.patientPays !== "Yes") return res.status(400).json({ error: "No patient payment is due." });
-      trip.paymentCollected = true; trip.payStatus = "Paid"; trip.collectedBy = req.user.driver || "Dispatch"; trip.collectedAt = new Date().toISOString();
-    } else if (req.user.role === "dispatch") {
-      if (Object.prototype.hasOwnProperty.call(req.body, "driver")) trip.driver = cleanString(req.body.driver, 100);
-      if (Object.prototype.hasOwnProperty.call(req.body, "helperDriver")) trip.helperDriver = cleanString(req.body.helperDriver, 100);
-    } else return res.status(400).json({ error: "Unsupported update." });
+  if (trip.patientPays !== "Yes")
+    return res.status(400).json({ error: "No patient payment is due." });
 
-    const updated = normalizeTrip(trip);
-    await pool.query("UPDATE trips SET data=$2, updated_at=NOW() WHERE id=$1", [req.params.id, updated]);
-    res.json({ trip: updated });
+  const method = cleanString(req.body?.paymentMethod, 20);
+  const allowedMethods = ["Cash", "Check", "Credit Card"];
+
+  if (!allowedMethods.includes(method))
+    return res.status(400).json({ error: "Select Cash, Check, or Credit Card." });
+
+  trip.paymentCollected = true;
+  trip.payStatus = "Paid";
+  trip.paymentMethod = method;
+  trip.collectedBy = req.user.driver || "Dispatch";
+  trip.collectedAt = new Date().toISOString();
+} else if (req.user.role === "dispatch") {
+  if (Object.prototype.hasOwnProperty.call(req.body, "driver"))
+    trip.driver = cleanString(req.body.driver, 100);
+
+  if (Object.prototype.hasOwnProperty.call(req.body, "helperDriver"))
+    trip.helperDriver = cleanString(req.body.helperDriver, 100);
+
+} else {
+  return res.status(400).json({ error: "Unsupported update." });
+}
+
+const updated = normalizeTrip(trip);
+await pool.query("UPDATE trips SET data=$2, updated_at=NOW() WHERE id=$1", [req.params.id, updated]);
+res.json({ trip: updated });
   } catch (error) { next(error); }
 });
 
