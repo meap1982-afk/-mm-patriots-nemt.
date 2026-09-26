@@ -122,11 +122,16 @@ async function createTrip() {
   if (required.some((value) => !value.trim())) return alert("Patient first and last name, phone, and all address fields except suite/apartment are required.");
   if (![pickup, dropoff].every(({ state, zip }) => /^[A-Z]{2}$/.test(state) && /^\d{5}(-\d{4})?$/.test(zip)))
     return alert("Use a two-letter state and a 5-digit ZIP code (or ZIP+4).");
+  const hasStairs = $("hasStairs").value;
+  const stairsCount = hasStairs === "Yes" ? Number($("stairsCount").value) : 0;
+  if (hasStairs === "Yes" && (!Number.isInteger(stairsCount) || stairsCount < 1 || stairsCount > 999))
+    return alert("Enter the number of steps (1–999) when Has Stairs is Yes.");
   const now = Date.now();
   const base = {
     patientFirstName: firstName, patientLastName: lastName, patient: `${firstName} ${lastName}`,
     phone: $("phone").value, weight: Number($("weight").value || 0), type: $("tripType").value,
     needsWheelchair: $("needsWheelchair").value, needsOxygen: $("needsOxygen").value,
+    hasStairs, stairsCount,
     twoMen: $("twoMen").value, needsHelper: $("needsHelper").value,
     helperDriver: $("needsHelper").value === "Yes" ? $("helperDriver").value : "",
     payment: $("payment").value, payStatus: $("payStatus").value, patientPays: $("patientPays").value,
@@ -173,6 +178,7 @@ function tripCard(t, mode) {
   const tripLabel = roundTrip ? (t.leg === "B" ? "Return" : "Pick Up") : "One Way";
   const needsWheelchair = t.needsWheelchair === "Yes" || (t.needsWheelchair == null && t.type === "Wheelchair");
   const needsOxygen = t.needsOxygen === "Yes";
+  const stairs = t.hasStairs === "Yes" ? `YES — ${Number(t.stairsCount) > 0 ? `${Number(t.stairsCount)} steps` : "count not specified"}` : t.hasStairs === "No" ? "NO" : "Not specified";
   const dialLink = phoneDialLink(t.phone);
   const options = [...drivers, "Unassigned"].map((name) => `<option ${name === t.driver ? "selected" : ""}>${esc(name)}</option>`).join("");
   const helperOptions = [...drivers, "Unassigned"].map((name) => `<option ${name === t.helperDriver ? "selected" : ""}>${esc(name)}</option>`).join("");
@@ -181,6 +187,7 @@ function tripCard(t, mode) {
     <div class="topline"><h3>${tripLabel}</h3>${mode === "dispatch" ? `<span class="badge ${roundTrip ? "rt" : ""}">${roundTrip ? "R/T" : "One Way"}</span>` : ""}</div>
     <div><b>${esc(t.time || "Will Call")} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
     <div class="step ${needsWheelchair || needsOxygen ? "current" : ""}">♿ Need Wheelchair: <b>${needsWheelchair ? "YES" : "NO"}</b><br>Need Oxygen: <b>${needsOxygen ? "YES" : "NO"}</b></div>
+    <div class="step ${t.hasStairs === "Yes" ? "current" : ""}">Stairs: <b>${stairs}</b></div>
     ${t.needsHelper === "Yes" ? `<div class="meta">🧑‍🤝‍🧑 <b>Helper Driver:</b> ${esc(t.helperDriver || "Unassigned")}</div>` : ""}
     <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Patient Pays: YES — $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Patient Pays: NO"}</div>
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
@@ -225,6 +232,7 @@ function updateTripService() {
 $("isRT").addEventListener("change", updateTripService);
 updateTripService();
 $("needsHelper").addEventListener("change", () => $("helperDriverWrap").classList.toggle("hidden", $("needsHelper").value !== "Yes"));
+$("hasStairs").addEventListener("change", () => $("stairsCountWrap").classList.toggle("hidden", $("hasStairs").value !== "Yes"));
 $("tripType").addEventListener("change", () => { $("needsWheelchair").value = $("tripType").value === "Wheelchair" ? "Yes" : "No"; });
 $("helperDriverWrap").classList.add("hidden");
 
