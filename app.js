@@ -122,7 +122,7 @@ async function refreshDriverLocations() {
 
 function locationMessage(message) {
   $("locationStatus").textContent = message;
-  $("shareLocation").textContent = sharingLocation ? "Go Offline" : "Go Online";
+  $("shareLocation").textContent = sharingLocation ? "Check Out" : "Retry Location";
 }
 
 async function sendLocation() {
@@ -173,7 +173,8 @@ function stopLocationSharing() {
 }
 
 function toggleLocationSharing() {
-  sharingLocation ? stopLocationSharing() : startLocationSharing();
+  if (sharingLocation) logout();
+  else startLocationSharing();
 }
 
 document.addEventListener("visibilitychange", () => {
