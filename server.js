@@ -60,6 +60,8 @@ function normalizeTrip(input) {
   const status = Math.max(0, Math.min(5, Number(input.status || 0)));
   const patientFirstName = cleanString(input.patientFirstName, 75);
   const patientLastName = cleanString(input.patientLastName, 75);
+  const payerType = input.payerType === "Patient" ? "Patient" : input.payerType === "Other" ? "Other" : "";
+  const paymentByPhone = input.paymentByPhone === "Yes" ? "Yes" : input.paymentByPhone === "No" ? "No" : "";
   return {
     id: cleanString(input.id, 80), group: cleanString(input.group, 80), leg: cleanString(input.leg, 1),
     label: cleanString(input.label, 60),
@@ -71,6 +73,7 @@ function normalizeTrip(input) {
     needsOxygen: input.needsOxygen === "Yes" ? "Yes" : "No",
     hasStairs: input.hasStairs === "Yes" ? "Yes" : input.hasStairs === "No" ? "No" : "",
     stairsCount: input.hasStairs === "Yes" ? Math.max(0, Math.min(999, Math.trunc(Number(input.stairsCount) || 0))) : 0,
+    hasCompanion: input.hasCompanion === "Yes" ? "Yes" : input.hasCompanion === "No" ? "No" : "",
     twoMen: cleanString(input.twoMen, 5),
     needsHelper: cleanString(input.needsHelper, 5), helperDriver: cleanString(input.helperDriver, 100),
     paymentSource: cleanString(input.paymentSource, 30),
@@ -81,6 +84,11 @@ paymentCollected: Boolean(input.paymentCollected),
 payment: cleanString(input.payment, 80),
 payStatus: cleanString(input.payStatus, 30),
 patientPays: cleanString(input.patientPays, 5),
+payerType,
+payerFirstName: input.patientPays === "Yes" && payerType === "Patient" ? patientFirstName : cleanString(input.payerFirstName, 75),
+payerLastName: input.patientPays === "Yes" && payerType === "Patient" ? patientLastName : cleanString(input.payerLastName, 75),
+payerRelationship: input.patientPays === "Yes" && payerType === "Patient" ? "Self" : cleanString(input.payerRelationship, 80),
+paymentByPhone,
 collectedBy: cleanString(input.collectedBy, 100),
 collectedAt: cleanString(input.collectedAt, 100),
     auth: cleanString(input.auth, 150), notes: cleanString(input.notes, 1500), created: Number(input.created || Date.now()),
@@ -123,7 +131,9 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
   if (!incoming.length || incoming.some((trip) => !trip.id || !trip.patient ||
       (Boolean(trip.patientFirstName) !== Boolean(trip.patientLastName)) ||
       !trip.pickup.address || !trip.dropoff.address ||
-      (trip.hasStairs === "Yes" && trip.stairsCount < 1))) {
+      (trip.hasStairs === "Yes" && trip.stairsCount < 1) ||
+      (trip.patientPays === "Yes" && (!trip.payerType || !trip.payerFirstName || !trip.payerLastName ||
+        (trip.payerType === "Other" && !trip.payerRelationship))))) {
     return res.status(400).json({ error: "Required trip information is missing." });
   }
   const client = await pool.connect();
