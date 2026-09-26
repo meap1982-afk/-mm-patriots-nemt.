@@ -1,6 +1,6 @@
 "use strict";
 
-const steps = ["Assigned", "Arrived", "Pick Up", "Completed"];
+const steps = ["Assigned", "Accepted", "Arrived at Pickup", "Patient Picked Up", "Arrived at Destination", "Completed"];
 const $ = (id) => document.getElementById(id);
 let trips = [];
 let drivers = [];
@@ -102,7 +102,9 @@ async function createTrip() {
     twoMen: $("twoMen").value, needsHelper: $("needsHelper").value,
     helperDriver: $("needsHelper").value === "Yes" ? $("helperDriver").value : "",
     payment: $("payment").value, payStatus: $("payStatus").value, patientPays: $("patientPays").value,
-    patientAmount: Number($("patientAmount").value || 0), paymentCollected: false, collectedBy: "", collectedAt: "",
+    patientAmount: Number($("patientAmount").value || 0), paymentCollected: $("patientPays").value === "Yes" && $("payStatus").value === "Paid",
+    collectedBy: $("patientPays").value === "Yes" && $("payStatus").value === "Paid" ? "Dispatch" : "",
+    collectedAt: $("patientPays").value === "Yes" && $("payStatus").value === "Paid" ? new Date().toISOString() : "",
     auth: $("auth").value, notes: $("notes").value, created: now
   };
   const group = `${$("isRT").value === "yes" ? "RT" : "OW"}-${now}`;
@@ -142,7 +144,7 @@ function tripCard(t, mode) {
     <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${esc(t.pickup?.address)} ${esc(t.pickup?.room)}<br>🏁 ${esc(t.dropoff?.type)} — ${esc(t.dropoff?.address)} ${esc(t.dropoff?.room)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Patient Pays: YES — $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Patient Pays: NO"}</div>
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
     ${mode === "driver" && t.phone ? `<div class="actions"><button class="ghost" onclick="window.location.href='tel:${esc(t.phone)}'">📞 CALL PATIENT</button></div>` : ""}
-    ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><button class="success" onclick="collectPayment('${esc(t.id)}')">PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
+    ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')">RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
     ${mode === "driver" && Number(t.status) < 5 ? `<div class="actions"><button class="${Number(t.status) === 0 ? "success" : "primary"}" onclick="advance('${esc(t.id)}')">${Number(t.status) === 0 ? "ACCEPT TRIP" : esc(next.toUpperCase())}</button></div>` : ""}
     ${mode === "driver" && Number(t.status) === 5 ? `<div class="step done">✓ Trip Completed</div>` : ""}
     ${mode === "dispatch" ? `<div class="step ${Number(t.status) === 5 ? "done" : "current"}">${esc(status)}</div>${t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ Payment Collected: $${Number(t.patientAmount || 0).toFixed(2)} · ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</div>` : `<div class="step current">Payment Due: $${Number(t.patientAmount || 0).toFixed(2)} — Not Collected</div>`) : ""}` : ""}
@@ -159,10 +161,12 @@ function changeHelper(id, helperDriver) { return patchTrip(id, { helperDriver })
 function advance(id) { return patchTrip(id, { action: "advance" }); }
 function collectPayment(id) {
   const trip = trips.find((item) => item.id === id);
-  if (!trip || !confirm(`Confirm that $${Number(trip.patientAmount || 0).toFixed(2)} was collected from ${trip.patient}?`)) return;
-  return patchTrip(id, { action: "collectPayment" });
+  if (!trip || trip.paymentCollected) return;
+  const paymentMethod = document.getElementById(`paymentMethod-${id}`)?.value;
+  if (!paymentMethod) return alert("Select Cash, Check, or Credit Card.");
+  if (!confirm(`Confirm that $${Number(trip.patientAmount || 0).toFixed(2)} was collected from ${trip.patient} by ${paymentMethod}?`)) return;
+  return patchTrip(id, { action: "collectPayment", paymentMethod });
 }
-
 function render() {
   $("dispatchTrips").innerHTML = trips.length ? trips.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No trips yet. Create the first trip above.</div>`;
   $("driverTrips").innerHTML = trips.length ? trips.map((trip) => tripCard(trip, "driver")).join("") : `<div class="card">No trips assigned to ${esc(session?.driver || "this driver")}.</div>`;
