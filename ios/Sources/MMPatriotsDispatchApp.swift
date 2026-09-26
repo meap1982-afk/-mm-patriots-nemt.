@@ -97,6 +97,7 @@ struct WebContainer: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let controller = WKUserContentController()
         controller.add(context.coordinator, name: "driverLocation")
+        controller.addUserScript(WKUserScript(source: "window.nativeTripNotifications = true;", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = controller
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -165,6 +166,7 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
     @Published private(set) var active = false
     @Published private(set) var status = "Checked out"
     private let manager = CLLocationManager()
+    private let notifications = DriverNotifications()
     private var token: String?
     private var expiresAt = Date.distantPast
     private var upload: URLSessionDataTask?
@@ -221,6 +223,7 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
             report(false, "Session expired · check in again"); return
         }
         self.token = token
+        if let baseURL { notifications.start(server: baseURL, driver: driver) }
         expiresAt = Date(timeIntervalSince1970: expiry)
         generation = UUID()
         active = true
@@ -267,6 +270,7 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
     }
 
     func checkOut() {
+        notifications.stop()
         if let token, let baseURL {
             let item = PendingCheckout(server: baseURL, token: token)
             if !pending.contains(item) { pending.append(item); persistPending() }
@@ -303,6 +307,7 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
         retryCheckout()
         guard active else { return }
         if Date() >= expiresAt { checkOut(); return }
+        if let baseURL, let token { notifications.poll(server: baseURL, token: token) }
         if manager.authorizationStatus == .authorizedAlways && manager.accuracyAuthorization == .fullAccuracy && Date().timeIntervalSince(lastAcknowledged) >= 60 {
             report(false, "Location required · no recent update delivered")
         }

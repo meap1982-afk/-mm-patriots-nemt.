@@ -66,7 +66,7 @@ function normalizeTrip(input) {
   const paymentByPhone = payerType === "NoPay" ? "" : input.paymentByPhone === "Yes" ? "Yes" : input.paymentByPhone === "No" ? "No" : "";
   return {
     id: cleanString(input.id, 80), group: cleanString(input.group, 80), leg: cleanString(input.leg, 1),
-    label: cleanString(input.label, 60),
+    label: cleanString(input.label, 60), cancelled: input.cancelled === true,
     returnPending: input.returnPending === true && input.leg === "B" && String(input.group || "").startsWith("RT-"),
     patientFirstName, patientLastName,
     patient: patientFirstName && patientLastName ? `${patientFirstName} ${patientLastName}` : cleanString(input.patient, 150),
@@ -88,6 +88,7 @@ payment: cleanString(input.payment, 80),
 payStatus: cleanString(input.payStatus, 30),
 patientPays,
 payerType,
+payerPhone: payerType === "NoPay" ? "" : cleanString(input.payerPhone, 40),
 payerFirstName: payerType === "NoPay" ? "" : patientPays === "Yes" && payerType === "Patient" ? patientFirstName : cleanString(input.payerFirstName, 75),
 payerLastName: payerType === "NoPay" ? "" : patientPays === "Yes" && payerType === "Patient" ? patientLastName : cleanString(input.payerLastName, 75),
 payerRelationship: payerType === "NoPay" ? "" : patientPays === "Yes" && payerType === "Patient" ? "Self" : cleanString(input.payerRelationship, 80),
@@ -196,11 +197,39 @@ app.delete("/api/driver-location", auth, async (req, res, next) => {
   finally { client.release(); }
 });
 
+// Persist events in the same transaction as the trip change, including deletions.
+function tripRecipients(trip) {
+  if (!trip || trip.returnPending || trip.cancelled) return [];
+  return [...new Set([trip.driver, trip.helperDriver].filter(name => drivers.includes(name)))];
+}
+async function notifyTripChange(client, before, after) {
+  const previous = tripRecipients(before), current = tripRecipients(after);
+  for (const driver of new Set([...previous, ...current])) {
+    const kind = !current.includes(driver) ? "cancelled" : !previous.includes(driver) ? "assigned" : null;
+    if (!kind) continue;
+    const trip = after || before;
+    await client.query("INSERT INTO driver_notifications (id,driver,trip_id,kind,trip_label) VALUES ($1,$2,$3,$4,$5)",
+      [crypto.randomUUID(), driver, trip.id, kind, trip.leg === "B" ? "Return" : "Pick Up"]);
+  }
+}
+app.get("/api/notifications", auth, async (req, res, next) => {
+  try {
+    const result = await pool.query("SELECT id,trip_id,kind,trip_label,actor,created_at FROM driver_notifications WHERE recipient_role=$1 AND driver=$2 AND read_at IS NULL ORDER BY created_at,id", [req.user.role, req.user.role === "dispatch" ? "" : req.user.driver]);
+    res.json({ notifications: result.rows });
+  } catch (error) { next(error); }
+});
+app.patch("/api/notifications/:id/read", auth, async (req, res, next) => {
+  try {
+    await pool.query("UPDATE driver_notifications SET read_at=NOW() WHERE id=$1 AND driver=$2 AND recipient_role=$3", [req.params.id, req.user.role === "dispatch" ? "" : req.user.driver, req.user.role]);
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
 app.get("/api/trips", auth, async (req, res, next) => {
   try {
     const result = req.user.role === "dispatch"
       ? await pool.query("SELECT data FROM trips ORDER BY created_at DESC")
-      : await pool.query("SELECT data FROM trips WHERE (data->>'driver'=$1 OR data->>'helperDriver'=$1) AND data->>'returnPending' IS DISTINCT FROM 'true' ORDER BY created_at DESC", [req.user.driver]);
+      : await pool.query("SELECT data FROM trips WHERE (data->>'driver'=$1 OR data->>'helperDriver'=$1) AND data->>'returnPending' IS DISTINCT FROM 'true' AND data->>'cancelled' IS DISTINCT FROM 'true' ORDER BY created_at DESC", [req.user.driver]);
     res.json({ trips: result.rows.map((row) => row.data) });
   } catch (error) { next(error); }
 });
@@ -219,7 +248,9 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
   try {
     await client.query("BEGIN");
     for (const trip of incoming) {
+      const existing = await client.query("SELECT data FROM trips WHERE id=$1 FOR UPDATE", [trip.id]);
       await client.query("INSERT INTO trips (id,data,created_at,updated_at) VALUES ($1,$2,to_timestamp($3/1000.0),NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()", [trip.id, trip, trip.created]);
+      await notifyTripChange(client, existing.rows[0]?.data, trip);
     }
     await client.query("COMMIT");
     res.status(201).json({ trips: incoming });
@@ -228,15 +259,23 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
 });
 
 app.delete("/api/trips/:id", auth, dispatchOnly, async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const result = await pool.query("DELETE FROM trips WHERE id=$1 RETURNING id", [req.params.id]);
-    if (!result.rowCount) return res.status(404).json({ error: "Trip not found." });
+    await client.query("BEGIN");
+    const result = await client.query("DELETE FROM trips WHERE id=$1 RETURNING data", [req.params.id]);
+    if (!result.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Trip not found." });
+    }
+    await notifyTripChange(client, result.rows[0].data, null);
+    await client.query("COMMIT");
     res.json({ ok: true, id: req.params.id });
-  } catch (error) { next(error); }
+  } catch (error) { await client.query("ROLLBACK"); next(error); }
+  finally { client.release(); }
 });
 
 app.patch("/api/trips/:id", auth, async (req, res, next) => {
-  if (req.body?.action === "edit" && req.user.role !== "dispatch")
+  if (["edit", "cancel"].includes(req.body?.action) && req.user.role !== "dispatch")
     return res.status(403).json({ error: "Only Dispatch can edit trips." });
   const client = await pool.connect();
   try {
@@ -257,6 +296,11 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       return res.status(404).json({ error: "Trip not found." });
     }
     const trip = row.data;
+    const before = structuredClone(trip);
+    if (trip.cancelled) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This trip is cancelled." });
+    }
     const assigned = trip.driver === req.user.driver || trip.helperDriver === req.user.driver;
     if (req.user.role !== "dispatch" && !assigned) {
       await client.query("ROLLBACK");
@@ -277,7 +321,10 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       }
     }
     const updates = [trip];
-    if (req.body?.action === "edit") {
+    if (req.body?.action === "cancel") {
+      trip.cancelled = true;
+      trip.events = [...(trip.events || []), { status: "Cancelled", time: new Date().toISOString(), by: "Dispatch" }].slice(-20);
+    } else if (req.body?.action === "edit") {
       const input = req.body.trip;
       if (!input || typeof input !== "object" || Array.isArray(input)) {
         await client.query("ROLLBACK");
@@ -287,7 +334,7 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
         "hasStairs", "stairsCount", "hasCompanion", "twoMen", "needsHelper", "helperDriver", "driver",
         "time", "timeType", "pickup", "dropoff", "auth", "notes"];
       if (!trip.paymentCollected) fields.push("payment", "patientPays", "payerType", "patientAmount", "paymentByPhone",
-        "payerFirstName", "payerLastName", "payerRelationship");
+        "payerFirstName", "payerLastName", "payerRelationship", "payerPhone");
       const changes = {};
       for (const key of fields) {
         if (Object.prototype.hasOwnProperty.call(input, key)) changes[key] = input[key];
@@ -369,6 +416,11 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       await client.query("UPDATE trips SET data=$2, updated_at=NOW() WHERE id=$1", [normalized.id, normalized]);
       if (item.id === trip.id) updated = normalized;
     }
+    await notifyTripChange(client, before, updated);
+    if (req.user.role === "driver" && req.body?.action === "advance" && [1, 5].includes(updated.status)) {
+      await client.query("INSERT INTO driver_notifications (id,driver,recipient_role,trip_id,kind,trip_label,actor) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        [crypto.randomUUID(), "", "dispatch", updated.id, updated.status === 1 ? "accepted" : "dropped_off", updated.leg === "B" ? "Return" : "Pick Up", req.user.driver]);
+    }
     await client.query("COMMIT");
     res.json({ trip: updated });
   } catch (error) {
@@ -407,6 +459,13 @@ async function start() {
     driver TEXT PRIMARY KEY, session_id TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT false,
     expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS driver_notifications (
+    id TEXT PRIMARY KEY, driver TEXT NOT NULL, trip_id TEXT NOT NULL,
+    kind TEXT NOT NULL, trip_label TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), read_at TIMESTAMPTZ
+  )`);
+  await pool.query("ALTER TABLE driver_notifications ADD COLUMN IF NOT EXISTS recipient_role TEXT NOT NULL DEFAULT 'driver', ADD COLUMN IF NOT EXISTS actor TEXT NOT NULL DEFAULT ''");
+  await pool.query("CREATE INDEX IF NOT EXISTS driver_notifications_unread ON driver_notifications(driver,created_at) WHERE read_at IS NULL");
   return app.listen(port, () => console.log(`M&M Patriots NEMT listening on ${port}`));
 }
 

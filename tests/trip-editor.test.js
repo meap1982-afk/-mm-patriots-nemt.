@@ -34,7 +34,7 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   fields.get('patientFirstName').value = 'Unsaved draft';
   const original = { id: 'return-b', group: 'RT-test', leg: 'B', returnPending: true, status: 0,
     patientFirstName: 'Test', patientLastName: 'Patient', patient: 'Test Patient', phone: '5555550100',
-    driver: 'Test Driver', type: 'Bariatric Wheelchair', payerType: 'NoPay', timeType: 'Will Call',
+    driver: 'Test Driver', type: 'Bariatric Wheelchair', payerType: 'Other', patientPays: 'Yes', payerFirstName: 'Pay', payerLastName: 'Person', payerRelationship: 'Friend', payerPhone: '+1 (555) 555-0123', timeType: 'Will Call',
     pickup: { type: 'Hospital', address: '123 Hospital Road, Town, VA 20164', room: '4' },
     dropoff: { type: 'Home', address: '456 Home Road, Town, VA 20164' }, notes: 'Before' };
   vm.runInContext(`session = {role: 'dispatch', token: 'test'}; trips = [${JSON.stringify(original)}]; editTrip('return-b')`, context);
@@ -45,12 +45,15 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   assert.equal(fields.get('isRT').disabled, true);
   assert.equal(fields.get('isRT').value, 'yes');
   assert.equal(fields.get('returnFields').classList.contains('hidden'), true);
+  assert.equal(fields.get('payerPhone').value, original.payerPhone);
+  fields.get('payerPhone').value = '+1 (555) 555-0456';
   fields.get('notes').value = 'Changed return';
   await vm.runInContext('createTrip()', context);
   const edit = calls.find(c => c.method === 'PATCH');
   assert.equal(edit.url, '/api/trips/return-b');
   assert.equal(JSON.parse(edit.body).action, 'edit');
   assert.equal(JSON.parse(edit.body).trip.notes, 'Changed return');
+  assert.equal(JSON.parse(edit.body).trip.payerPhone, '+1 (555) 555-0456');
   assert.equal(JSON.parse(edit.body).trip.pickup.address, original.pickup.address);
   assert.equal(JSON.parse(edit.body).trip.time, '');
   assert.ok(!calls.some(c => c.method === 'POST'));
@@ -64,4 +67,16 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   await vm.runInContext("deleteTrip('return-b')", context);
   assert.equal(calls.find(c => c.method === 'DELETE').url, '/api/trips/return-b');
   assert.equal(alerts.length, 1);
+});
+
+ test('driver can see and dial the payer separately from the patient', () => {
+  const context = vm.createContext({ document: { addEventListener() {} }, localStorage: { getItem: () => 'null' }, window: {}, console });
+  vm.runInContext(fs.readFileSync(require.resolve('../app.js'), 'utf8').split('for (const leg of ["a", "b"])')[0], context);
+  vm.runInContext(`trip = {id: 'call', patient: 'Patient', phone: '5555550100', patientPays: 'Yes', payerType: 'Other', payerFirstName: 'Other', payerLastName: 'Person', payerPhone: '+1 (555) 555-0456'};`, context);
+  const card = vm.runInContext('tripCard(trip, "driver")', context);
+  assert.match(card, /Payer Phone: <b>\+1 \(555\) 555-0456/);
+  assert.match(card, /href="tel:\+15555550456"[^>]*>📞 CALL PAYER/);
+  assert.match(card, /href="tel:5555550100"[^>]*>📞 CALL PATIENT/);
+  assert.doesNotMatch(vm.runInContext('tripCard({...trip, payerPhone: ""}, "driver")', context), /CALL PAYER/);
+  assert.doesNotMatch(vm.runInContext('tripCard({...trip, patientPays: "No", payerType: "NoPay"}, "driver")', context), /CALL PAYER/);
 });

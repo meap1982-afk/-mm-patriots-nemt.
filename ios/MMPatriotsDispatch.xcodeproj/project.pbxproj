@@ -7,16 +7,31 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5490674DF950629AC4D25B4F /* DriverNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF72EFAEE7CB3D6A98BA72E0 /* DriverNotifications.swift */; };
 		92DA45FC128D10D51A3E83C5 /* MMPatriotsDispatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04072765609CEEBE1C4FF81 /* MMPatriotsDispatchApp.swift */; };
+		C22D82DEDF833D51410612C7 /* assigned.wav in Resources */ = {isa = PBXBuildFile; fileRef = 80EDF90D15C0C87FD6AABE4C /* assigned.wav */; };
+		DAF964AD587FEF14A2BDEF31 /* cancelled.wav in Resources */ = {isa = PBXBuildFile; fileRef = C3992C358CBDF8C1817726EB /* cancelled.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2F0F059E0558B2B475ED91EB /* MMPatriotsDispatch.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MMPatriotsDispatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		453E9ED5CE3E58D7F78DD5F4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		80EDF90D15C0C87FD6AABE4C /* assigned.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = assigned.wav; sourceTree = "<group>"; };
+		AF72EFAEE7CB3D6A98BA72E0 /* DriverNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverNotifications.swift; sourceTree = "<group>"; };
+		C3992C358CBDF8C1817726EB /* cancelled.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = cancelled.wav; sourceTree = "<group>"; };
 		D04072765609CEEBE1C4FF81 /* MMPatriotsDispatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMPatriotsDispatchApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		4889FC3C20F3373921C54E4D /* Sounds */ = {
+			isa = PBXGroup;
+			children = (
+				80EDF90D15C0C87FD6AABE4C /* assigned.wav */,
+				C3992C358CBDF8C1817726EB /* cancelled.wav */,
+			);
+			path = Sounds;
+			sourceTree = "<group>";
+		};
 		95C31EB7541E15D931720E7B = {
 			isa = PBXGroup;
 			children = (
@@ -36,8 +51,10 @@
 		FD9386B66BDF490F8D5AFEDF /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				AF72EFAEE7CB3D6A98BA72E0 /* DriverNotifications.swift */,
 				453E9ED5CE3E58D7F78DD5F4 /* Info.plist */,
 				D04072765609CEEBE1C4FF81 /* MMPatriotsDispatchApp.swift */,
+				4889FC3C20F3373921C54E4D /* Sounds */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -50,6 +67,7 @@
 			buildConfigurationList = 98E4951B593289B71CE98F4C /* Build configuration list for PBXNativeTarget "MMPatriotsDispatch" */;
 			buildPhases = (
 				ABC26CE78C9B0D22689B84F2 /* Sources */,
+				DAA7D7B5E47C81CC418337DF /* Resources */,
 			);
 			buildRules = (
 			);
@@ -95,11 +113,24 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		DAA7D7B5E47C81CC418337DF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C22D82DEDF833D51410612C7 /* assigned.wav in Resources */,
+				DAF964AD587FEF14A2BDEF31 /* cancelled.wav in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		ABC26CE78C9B0D22689B84F2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5490674DF950629AC4D25B4F /* DriverNotifications.swift in Sources */,
 				92DA45FC128D10D51A3E83C5 /* MMPatriotsDispatchApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

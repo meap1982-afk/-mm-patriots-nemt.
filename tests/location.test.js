@@ -43,6 +43,34 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal(saved.data.trips[0].timeType, 'Will Call');
     assert.equal((await request('/trips', dispatch, 'POST', { trips: [{ ...tripInput, time: '' }] })).status, 400);
     const first = await login();
+    assert.equal((await request('/notifications')).status, 401);
+    assert.equal((await request('/notifications', dispatch)).status, 200);
+    const inbox = async () => (await request('/notifications', first)).data.notifications;
+    const eventTrip = { ...tripInput, id: 'notice-test', driver: 'Test Driver', helperDriver: 'Test Driver' };
+    assert.equal((await request('/trips', dispatch, 'POST', { trips: [eventTrip] })).status, 201);
+    let notices = (await inbox()).filter(n => n.trip_id === eventTrip.id);
+    assert.equal(notices.length, 1); // Primary and helper are the same person.
+    assert.equal(notices[0].kind, 'assigned');
+    await request('/trips/notice-test', dispatch, 'PATCH', { driver: 'Test Driver' });
+    assert.equal((await inbox()).filter(n => n.trip_id === eventTrip.id).length, 1);
+    await request('/trips/notice-test', dispatch, 'PATCH', { driver: 'Unassigned', helperDriver: 'Unassigned' });
+    assert.equal((await inbox()).filter(n => n.trip_id === eventTrip.id && n.kind === 'cancelled').length, 1);
+    await request('/trips/notice-test', dispatch, 'PATCH', { driver: 'Test Driver' });
+    assert.equal((await request('/trips/notice-test', first, 'PATCH', { action: 'cancel' })).status, 403);
+    assert.equal((await request('/trips/notice-test', dispatch, 'PATCH', { action: 'cancel' })).status, 200);
+    assert.ok(!(await request('/trips', first)).data.trips.some(t => t.id === eventTrip.id));
+    assert.equal((await request('/trips/notice-test', first, 'PATCH', { action: 'advance' })).status, 409);
+    notices = (await inbox()).filter(n => n.trip_id === eventTrip.id);
+    assert.equal(notices.length, 4);
+    await request('/trips/notice-test', dispatch, 'DELETE');
+    assert.equal((await inbox()).filter(n => n.trip_id === eventTrip.id).length, 4);
+    await request(`/notifications/${notices[0].id}/read`, first, 'PATCH');
+    assert.ok(!(await inbox()).some(n => n.id === notices[0].id));
+    await query("INSERT INTO driver_notifications (id,driver,trip_id,kind,trip_label) VALUES ('other-private','Another Driver','private','assigned','Pick Up')");
+    assert.ok(!(await inbox()).some(n => n.id === 'other-private'));
+    await request('/notifications/other-private/read', first, 'PATCH');
+    assert.equal((await query("SELECT read_at FROM driver_notifications WHERE id='other-private'")).rows[0].read_at, null);
+
     assert.equal((await request('/driver-locations')).status, 401);
     assert.equal((await request('/driver-locations', first)).status, 403);
     let list = (await request('/driver-locations', dispatch)).data.locations;
@@ -67,10 +95,11 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal(createdPair.status, 201);
     assert.equal(createdPair.data.trips[0].returnPending, false);
     assert.equal(createdPair.data.trips[1].returnPending, true);
+    assert.ok(!(await inbox()).some(n => n.trip_id === 'pending-B'));
     assert.equal((await request('/trips/pending-B', first, 'PATCH', { action: 'edit', trip: { notes: 'Driver edit' } })).status, 403);
     assert.equal((await request('/trips/pending-B', first, 'DELETE')).status, 403);
     const editPending = await request('/trips/pending-B', dispatch, 'PATCH', { action: 'edit', trip: {
-      notes: 'Return only', timeType: 'Will Call', time: '10:00', id: 'wrong-id', group: 'OW-injected', leg: 'A',
+      payerPhone: '+1 (555) 555-0456', notes: 'Return only', timeType: 'Will Call', time: '10:00', id: 'wrong-id', group: 'OW-injected', leg: 'A',
       returnPending: false, status: 5, paymentCollected: true, collectedAt: 'injected'
     } });
     assert.equal(editPending.status, 200);
@@ -81,6 +110,7 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal(editPending.data.trip.status, 0);
     assert.equal(editPending.data.trip.paymentCollected, false);
     assert.equal(editPending.data.trip.notes, 'Return only');
+    assert.equal(editPending.data.trip.payerPhone, '+1 (555) 555-0456');
     assert.equal(editPending.data.trip.time, '');
     assert.equal((await request('/trips/pending-B', dispatch, 'PATCH', { action: 'edit', trip: { pickup: { address: '' } } })).status, 400);
     assert.equal((await request('/trips', dispatch)).data.trips.find(t => t.id === 'pending-A').notes, '');
@@ -98,16 +128,39 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     const released = await request('/trips/pending-B', dispatch, 'PATCH', { action: 'releaseReturn' });
     assert.equal(released.status, 200);
     assert.equal(released.data.trip.returnPending, false);
+    assert.equal((await inbox()).filter(n => n.trip_id === 'pending-B' && n.kind === 'assigned').length, 1);
     assert.equal(released.data.trip.status, 0);
     assert.equal((await request('/trips/pending-B', dispatch, 'PATCH', { action: 'releaseReturn' })).status, 409);
     driverTrips = (await request('/trips', first)).data.trips;
     assert.ok(driverTrips.some(t => t.id === 'pending-B'));
+    assert.equal(driverTrips.find(t => t.id === 'pending-B').payerPhone, '+1 (555) 555-0456');
     assert.equal(driverTrips.find(t => t.id === 'pending-A').status, 0);
     assert.equal((await request('/trips/pending-B', first, 'PATCH', { action: 'advance' })).status, 200);
+    let dispatchNotices = (await request('/notifications', dispatch)).data.notifications;
+    const acceptance = dispatchNotices.find(n => n.trip_id === 'pending-B' && n.kind === 'accepted');
+    assert.ok(acceptance);
+    assert.equal(acceptance.actor, 'Test Driver');
+    assert.ok(!(await inbox()).some(n => n.kind === 'accepted'));
+    await request(`/notifications/${acceptance.id}/read`, first, 'PATCH');
+    assert.ok((await request('/notifications', dispatch)).data.notifications.some(n => n.id === acceptance.id));
+    assert.equal((await request('/trips', dispatch, 'POST', { trips: [{...tripInput, id: 'dropoff-test', driver: 'Test Driver'}] })).status, 201);
+    for (let status = 1; status <= 4; status++) {
+      assert.equal((await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' })).status, 200);
+    }
+    assert.ok(!(await request('/notifications', dispatch)).data.notifications.some(n => n.trip_id === 'dropoff-test' && n.kind === 'dropped_off'));
+    assert.equal((await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' })).status, 200);
+    assert.equal((await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' })).status, 400);
+    dispatchNotices = (await request('/notifications', dispatch)).data.notifications.filter(n => n.trip_id === 'dropoff-test');
+    assert.equal(dispatchNotices.filter(n => n.kind === 'accepted').length, 1);
+    assert.equal(dispatchNotices.filter(n => n.kind === 'dropped_off').length, 1);
+    await request(`/notifications/${acceptance.id}/read`, dispatch, 'PATCH');
+    assert.ok(!(await request('/notifications', dispatch)).data.notifications.some(n => n.id === acceptance.id));
+
     assert.equal((await request('/trips/pending-A', dispatch, 'PATCH', { action: 'releaseReturn' })).status, 409);
     const editActive = await request('/trips/pending-B', dispatch, 'PATCH', { action: 'edit', trip: { notes: 'Still accepted', status: 0 } });
     assert.equal(editActive.data.trip.status, 1);
     assert.equal((await request('/trips/pending-B', dispatch, 'DELETE')).status, 200);
+    assert.equal((await inbox()).filter(n => n.trip_id === 'pending-B' && n.kind === 'cancelled').length, 1);
     assert.equal((await request('/trips/pending-B', dispatch, 'DELETE')).status, 404);
     const remaining = (await request('/trips', dispatch)).data.trips;
     assert.ok(!remaining.some(t => t.id === 'pending-B'));

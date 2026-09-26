@@ -6,6 +6,7 @@ let trips = [];
 let drivers = [];
 let session = JSON.parse(localStorage.getItem("mmSession") || "null");
 let polling;
+let notificationRequest = null;
 let editingTripId = null;
 let tripFormSnapshot = null;
 let savingTrip = false;
@@ -63,6 +64,7 @@ function openApp() {
   session.role === "dispatch" ? showDispatch() : showDriver();
   if (session.role === "driver") startLocationSharing();
   refreshTrips();
+  refreshNotifications();
   if (session.role === "dispatch") refreshDriverLocations();
   clearInterval(polling);
   polling = setInterval(() => {
@@ -72,6 +74,7 @@ function openApp() {
       render();
     }
     refreshTrips();
+    refreshNotifications();
     if (session?.role === "dispatch") refreshDriverLocations();
   }, 5000);
 }
@@ -81,7 +84,10 @@ function logout() {
   stopLocationSharing();
   clearInterval(polling);
   localStorage.removeItem("mmSession");
+  stopNotificationSounds();
   session = null; trips = [];
+  $("driverNotifications").innerHTML = "";
+  $("notificationCount").textContent = "0";
   $("app").classList.add("hidden");
   $("login").classList.remove("hidden");
   $("accessCode").value = "";
@@ -111,6 +117,107 @@ async function refreshTrips() {
     setSync("offline", "Offline");
     console.error(error);
   }
+}
+
+const notificationTones = {
+  assigned: [660, 880, 1100], cancelled: [440, 330, 220],
+  accepted: [880, 1100], dropped_off: [523, 659, 784, 1047]
+};
+function notificationTitle(kind) {
+  return ({ assigned: "New trip assigned", cancelled: "Trip cancelled / removed from your assignments",
+    accepted: "Driver accepted trip", dropped_off: "Patient dropped off · Trip completed" })[kind] || "Trip update";
+}
+let notificationAudio = null;
+let nextNotificationSound = 0;
+let soundedEvents = new Set();
+let soundedScope = "";
+function stopNotificationSounds() {
+  notificationAudio?.close().catch(() => {});
+  notificationAudio = null;
+  nextNotificationSound = 0;
+  soundedEvents = new Set(); soundedScope = "";
+  $("enableSounds").textContent = "Enable notification sounds";
+  $("soundStatus").textContent = "Enable sounds to hear different alerts for each trip event.";
+}
+async function enableNotificationSounds() {
+  if (session?.role === "driver" && window.nativeTripNotifications) {
+    $("soundStatus").textContent = "iPhone alerts use notification permissions and sound settings. Allow notifications in Settings.";
+    return;
+  }
+  try {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio) throw new Error("Audio unavailable");
+    if (!notificationAudio || notificationAudio.state === "closed") notificationAudio = new Audio();
+    await notificationAudio.resume();
+    $("enableSounds").textContent = "Test notification sound";
+    $("soundStatus").textContent = "Sounds enabled while this app is running. Keep this tab open.";
+    playNotificationSound(session?.role === "dispatch" ? "accepted" : "assigned");
+    if (window.Notification?.permission === "default") window.Notification.requestPermission().catch(() => {});
+    refreshNotifications();
+  } catch { $("soundStatus").textContent = "Sound is blocked. Check browser permissions and try again."; }
+}
+function playNotificationSound(kind) {
+  if (!notificationAudio || notificationAudio.state !== "running") return false;
+  const notes = notificationTones[kind] || notificationTones.assigned;
+  const start = Math.max(notificationAudio.currentTime, nextNotificationSound);
+  notes.forEach((frequency, index) => {
+    const oscillator = notificationAudio.createOscillator(), gain = notificationAudio.createGain();
+    const time = start + index * 0.22;
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.16, time + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+    oscillator.connect(gain); gain.connect(notificationAudio.destination);
+    oscillator.start(time); oscillator.stop(time + 0.2);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+  });
+  nextNotificationSound = start + notes.length * 0.22 + 0.15;
+  return true;
+}
+function announceNotifications(notices) {
+  if (session?.role === "driver" && window.nativeTripNotifications) return;
+  const scope = `mmNotificationSounds:${session?.role}:${session?.driver || "dispatch"}`;
+  if (soundedScope !== scope) {
+    soundedScope = scope;
+    try { soundedEvents = new Set(JSON.parse(localStorage.getItem(scope) || "[]")); }
+    catch { soundedEvents = new Set(); }
+  }
+  for (const item of notices) {
+    if (soundedEvents.has(item.id) || !playNotificationSound(item.kind)) continue;
+    soundedEvents.add(item.id);
+    try {
+      if (window.Notification?.permission === "granted") new window.Notification(notificationTitle(item.kind), {
+        body: "Open Dispatch to review your trip notifications.", tag: item.id, silent: true
+      });
+    } catch { /* The saved inbox remains available if system notifications are unsupported. */ }
+  }
+  try { localStorage.setItem(scope, JSON.stringify([...soundedEvents].slice(-5000))); } catch {}
+}
+
+async function refreshNotifications() {
+  if (!session || notificationRequest === session.token) return;
+  const token = session.token;
+  notificationRequest = token;
+  try {
+    const data = await api("/notifications");
+    if (session?.token !== token) return;
+    const notices = data.notifications || [];
+    announceNotifications(notices);
+    $("notificationCount").textContent = notices.length;
+    $("driverNotifications").innerHTML = notices.length ? notices.map(item =>
+      `<div class="step ${item.kind === "assigned" ? "done" : "current"}"><b>${esc(notificationTitle(item.kind))}</b><br>${esc(item.actor || "")} ${esc(item.trip_label)} · ${esc(item.trip_id)} · ${esc(displayDate(item.created_at))}<br><button class="ghost" onclick="readNotification('${esc(item.id)}')">Mark as read</button></div>`
+    ).join("") : '<p class="small">No unread notifications.</p>';
+  } catch (error) {
+    if (session?.token === token) $("driverNotifications").textContent = "Notifications unavailable. Retrying…";
+  } finally { if (notificationRequest === token) notificationRequest = null; }
+}
+async function readNotification(id) {
+  try { await api(`/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH" }); await refreshNotifications(); }
+  catch (error) { alert(error.message); }
+}
+async function cancelTrip(id) {
+  if (session?.role !== "dispatch" || !confirm("Cancel this trip and notify its assigned drivers?")) return;
+  return patchTrip(id, { action: "cancel" });
 }
 
 async function refreshDriverLocations() {
@@ -277,7 +384,7 @@ async function createTrip() {
     twoMen: $("twoMen").value, needsHelper: $("needsHelper").value,
     helperDriver: $("needsHelper").value === "Yes" ? $("helperDriver").value : "",
     payment: $("payment").value, payStatus: $("payStatus").value, patientPays,
-    payerType, payerFirstName, payerLastName, payerRelationship, paymentByPhone,
+    payerType, payerFirstName, payerLastName, payerRelationship, payerPhone: patientPays === "Yes" ? $("payerPhone").value.trim() : "", paymentByPhone,
     patientAmount: patientPays === "Yes" ? Number($("patientAmount").value || 0) : 0, paymentCollected: patientPays === "Yes" && $("payStatus").value === "Paid",
     collectedBy: patientPays === "Yes" && $("payStatus").value === "Paid" ? "Dispatch" : "",
     collectedAt: patientPays === "Yes" && $("payStatus").value === "Paid" ? new Date().toISOString() : "",
@@ -327,12 +434,12 @@ function phoneDialLink(value) {
 }
 
 function isPendingReturn(trip) {
-  return trip.returnPending === true && trip.leg === "B" && String(trip.group || "").startsWith("RT-");
+  return !trip.cancelled && trip.returnPending === true && trip.leg === "B" && String(trip.group || "").startsWith("RT-");
 }
 
 function tripCard(t, mode) {
   const pendingReturn = isPendingReturn(t);
-  const status = pendingReturn ? "Pending Return" : steps[Number(t.status || 0)] || steps[0];
+  const status = t.cancelled ? "Cancelled" : pendingReturn ? "Pending Return" : steps[Number(t.status || 0)] || steps[0];
   const roundTrip = String(t.group || "").startsWith("RT-");
   const tripLabel = roundTrip ? (t.leg === "B" ? "Return" : "Pick Up") : "One Way";
   const needsWheelchair = t.needsWheelchair === "Yes" || (t.needsWheelchair == null && ["Wheelchair", "Bariatric Wheelchair"].includes(t.type));
@@ -342,9 +449,10 @@ function tripCard(t, mode) {
   const payerName = [t.payerFirstName, t.payerLastName].filter(Boolean).join(" ") || "Not specified";
   const phonePayment = t.paymentByPhone === "Yes" ? "YES" : t.paymentByPhone === "No" ? "NO" : "Not specified";
   const dialLink = phoneDialLink(t.phone);
+  const payerDialLink = phoneDialLink(t.payerPhone);
   const options = [...drivers, "Unassigned"].map((name) => `<option ${name === t.driver ? "selected" : ""}>${esc(name)}</option>`).join("");
   const helperOptions = [...drivers, "Unassigned"].map((name) => `<option ${name === t.helperDriver ? "selected" : ""}>${esc(name)}</option>`).join("");
-  const next = Number(t.status) < 5 ? steps[Number(t.status) + 1] : "Completed";
+  const next = Number(t.status) === 4 ? "Patient dropped off / Complete trip" : Number(t.status) < 5 ? steps[Number(t.status) + 1] : "Completed";
   return `<div class="card trip ${t.leg === "B" ? "return" : ""}">
     <div class="topline"><h3>${tripLabel}</h3>${mode === "dispatch" ? `<span class="badge ${roundTrip ? "rt" : ""}">${roundTrip ? "R/T" : "One Way"}</span>` : ""}</div>
     <div><b>${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
@@ -353,11 +461,12 @@ function tripCard(t, mode) {
     <div class="step ${t.hasCompanion === "Yes" ? "current" : ""}">Companion: <b>${companion}</b></div>
     ${t.needsHelper === "Yes" ? `<div class="meta">🧑‍🤝‍🧑 <b>Helper Driver:</b> ${esc(t.helperDriver || "Unassigned")}</div>` : ""}
     <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Private Payment Due: $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Private Payment Due: NO"}</div>
-    ${t.payerType === "NoPay" ? `<div class="step">No Pay</div>` : t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
+    ${t.payerType === "NoPay" ? `<div class="step">No Pay</div>` : t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payer Phone: <b>${esc(t.payerPhone || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
-    ${mode === "dispatch" ? `<div class="actions"><button class="ghost" onclick="editTrip('${esc(t.id)}')">EDIT TRIP</button><button class="danger" onclick="deleteTrip('${esc(t.id)}')">DELETE TRIP</button></div>` : ""}
+    ${mode === "dispatch" ? `<div class="actions">${!t.cancelled ? `<button class="danger" onclick="cancelTrip('${esc(t.id)}')">CANCEL TRIP</button>` : ""}<button class="ghost" ${t.cancelled ? "disabled" : ""} onclick="editTrip('${esc(t.id)}')">EDIT TRIP</button><button class="danger" onclick="deleteTrip('${esc(t.id)}')">DELETE TRIP</button></div>` : ""}
     ${mode === "dispatch" && pendingReturn ? `<div class="actions"><button class="primary" onclick="releaseReturn('${esc(t.id)}')" ${drivers.includes(t.driver) ? "" : "disabled"}>DISPATCH RETURN</button></div><p class="small">${drivers.includes(t.driver) ? "Held in Pending Returns until you dispatch it." : "Assign a driver to dispatch this return."}</p>` : ""}
     ${mode === "driver" && dialLink ? `<div class="actions"><a class="ghost call-patient" href="${esc(dialLink)}" aria-label="Call ${esc(t.patient || "patient")}">📞 CALL PATIENT</a></div>` : ""}
+    ${mode === "driver" && t.patientPays === "Yes" && payerDialLink ? `<div class="actions"><a class="ghost call-payer" href="${esc(payerDialLink)}" aria-label="Call payer ${esc(payerName)}">📞 CALL PAYER</a></div>` : ""}
     ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
     ${mode === "driver" && Number(t.status) < 5 ? `<div class="actions"><button class="${Number(t.status) === 0 ? "success" : "primary"}" onclick="advance('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>${Number(t.status) === 0 ? "ACCEPT TRIP" : esc(next.toUpperCase())}</button></div>` : ""}
     ${mode === "driver" && Number(t.status) === 5 ? `<div class="step done">✓ Trip Completed</div>` : ""}
@@ -370,7 +479,7 @@ async function patchTrip(id, body) {
   catch (error) { setSync("offline", "Save failed"); alert(error.message); }
 }
 
-const billingFormFields = ["payment", "payerType", "patientAmount", "paymentByPhone", "payerFirstName", "payerLastName", "payerRelationship"];
+const billingFormFields = ["payment", "payerType", "patientAmount", "paymentByPhone", "payerFirstName", "payerLastName", "payerRelationship", "payerPhone"];
 
 function setFormValue(id, value) {
   const field = $(id);
@@ -405,7 +514,7 @@ function editTrip(id) {
     payment: trip.payment, payStatus: trip.payStatus || "Pending",
     payerType: trip.payerType || (trip.patientPays === "Yes" ? "Patient" : "NoPay"),
     patientAmount: trip.patientAmount || 0, paymentByPhone: trip.paymentByPhone || "No",
-    payerFirstName: trip.payerFirstName, payerLastName: trip.payerLastName, payerRelationship: trip.payerRelationship,
+    payerFirstName: trip.payerFirstName, payerLastName: trip.payerLastName, payerRelationship: trip.payerRelationship, payerPhone: trip.payerPhone,
     auth: trip.auth, notes: trip.notes
   };
   Object.entries(fields).forEach(([field, value]) => setFormValue(field, value));
@@ -482,11 +591,11 @@ function render() {
   $("pendingReturnCount").textContent = pendingReturns.length;
   $("kPendingReturns").textContent = pendingReturns.length;
   $("dispatchTrips").innerHTML = dispatchedTrips.length ? dispatchedTrips.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No dispatched trips.</div>`;
-  $("driverTrips").innerHTML = dispatchedTrips.length ? dispatchedTrips.map((trip) => tripCard(trip, "driver")).join("") : `<div class="card">No trips assigned to ${esc(session?.driver || "this driver")}.</div>`;
+  $("driverTrips").innerHTML = dispatchedTrips.filter(trip => !trip.cancelled).length ? dispatchedTrips.filter(trip => !trip.cancelled).map((trip) => tripCard(trip, "driver")).join("") : `<div class="card">No trips assigned to ${esc(session?.driver || "this driver")}.</div>`;
   $("kTotal").textContent = trips.length;
-  $("kScheduled").textContent = dispatchedTrips.filter((trip) => Number(trip.status) < 1).length;
-  $("kProgress").textContent = trips.filter((trip) => Number(trip.status) > 0 && Number(trip.status) < 5).length;
-  $("kDone").textContent = trips.filter((trip) => Number(trip.status) === 5).length;
+  $("kScheduled").textContent = dispatchedTrips.filter((trip) => !trip.cancelled && Number(trip.status) < 1).length;
+  $("kProgress").textContent = trips.filter((trip) => !trip.cancelled && Number(trip.status) > 0 && Number(trip.status) < 5).length;
+  $("kDone").textContent = trips.filter((trip) => !trip.cancelled && Number(trip.status) === 5).length;
 }
 
 function updatePickupTime(leg) {
@@ -512,6 +621,7 @@ function updatePayerFields() {
   $("patientPays").value = noPay ? "No" : "Yes";
   $("patientAmountWrap").classList.toggle("hidden", noPay);
   $("paymentByPhoneWrap").classList.toggle("hidden", noPay);
+  $("payerPhoneWrap").classList.toggle("hidden", noPay);
   $("payerNameFields").classList.toggle("hidden", $("payerType").value !== "Other");
 }
 $("payerType").addEventListener("change", updatePayerFields);

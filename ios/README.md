@@ -79,3 +79,30 @@ plutil -p /tmp/dispatch-build/Build/Products/Debug-iphoneos/MMPatriotsDispatch.a
 ```
 
 La única advertencia final de compilación fue la omisión de metadatos AppIntents porque la app no usa ese framework. La validación de firma y la instalación se realizan con el Team y el iPhone del usuario. No usar Archive/Distribute App para esta prueba.
+
+
+## Avisos de asignación y cancelación
+
+El servidor guarda una notificación por conductor y cambio de asignación en la misma transacción del viaje. Incluye conductor auxiliar, reasignación, Cancel Trip y Delete Trip. Los regresos pendientes avisan al pulsar Dispatch Return. Cancel Trip conserva el tramo cancelado en Dispatch y lo retira del conductor; no cancela el otro tramo del R/T.
+
+La bandeja Notifications consulta cada 5 segundos con la web abierta y conserva los avisos hasta Mark as read, incluso si se borra el viaje. La app iOS solicita permiso para avisos y sonido al hacer check-in. Su consulta nativa se limita a una cada 10 segundos mientras iOS permite ejecutar el turno, incluidos los callbacks de ubicación en segundo plano. Guarda los identificadores ya anunciados por servidor/conductor para evitar repetir sonidos. Check Out detiene las consultas y limpia los avisos del sistema.
+
+Estos son avisos locales basados en consultas, no APNs: sin red o con la app suspendida/cerrada no se garantiza aviso inmediato. Los eventos se recuperan al volver. La pantalla bloqueada no muestra nombres, direcciones ni datos de pago. Para avisos remotos independientes de la ejecución de la app se necesita configurar APNs y la firma/cuenta Apple correspondiente.
+
+Prueba física pendiente: instalar esta nueva compilación, aceptar notificaciones, asignar/reasignar/cancelar/borrar un viaje de prueba, verificar un solo aviso por evento, probar regreso pendiente/liberado, bloqueo de pantalla, pérdida de red, denegación de permiso y check-out. La bandeja debe seguir funcionando si se deniega el sonido o los avisos del sistema.
+
+API de Apple utilizada: https://developer.apple.com/documentation/usernotifications/unusernotificationcenter
+
+## Sonidos por evento para Dispatch y Driver
+
+- Dispatch: `accepted` se genera cuando el conductor avanza de Assigned a Accepted; tono de dos notas (880/1100 Hz).
+- Dispatch: `dropped_off` se genera al confirmar Patient dropped off / Complete trip (estado Completed); melodía de cuatro notas (523/659/784/1047 Hz). Llegar al destino por sí solo no confirma que dejó al paciente.
+- Driver: `assigned`, tres notas ascendentes (660/880/1100 Hz); `cancelled`, tres notas descendentes (440/330/220 Hz).
+
+En navegador, pulsar Enable notification sounds después de abrir la app. El botón reproduce una prueba; si el navegador lo permite, también solicita permiso para notificaciones del sistema. La bandeja funciona sin permiso. Cada evento suena una vez por navegador y destinatario; los identificadores se guardan localmente. El sonido necesita que el navegador siga ejecutándose y no esté silenciado. No hay entrega web push con el navegador cerrado.
+
+En el contenedor iPhone actualizado, el conductor usa los WAV incluidos en el bundle y se evita el sonido duplicado del JavaScript. Los WAV PCM duran 0.66 s cada uno. Dispatch usa el audio de la vista web mientras permanece abierta. El modo silencio, Focus y los ajustes de sonido del dispositivo pueden silenciar los avisos.
+
+Validación local: 8 pruebas automatizadas correctas; compilación Debug arm64 para iPhone sin firma correcta, con assigned.wav y cancelled.wav incluidos en Resources. Falta escuchar los avisos en los dispositivos reales y verificar bloqueo/segundo plano. No se desplegaron estos cambios.
+
+Referencia para sonidos nativos: https://developer.apple.com/documentation/usernotifications/unnotificationsound
