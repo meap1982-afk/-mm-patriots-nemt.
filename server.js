@@ -12,12 +12,18 @@ const app = express();
 const port = Number(process.env.PORT || 3000);
 const jwtSecret = process.env.JWT_SECRET;
 const dispatchCode = process.env.DISPATCH_ACCESS_CODE;
-const driverCode = process.env.DRIVER_ACCESS_CODE;
 const drivers = (process.env.DRIVER_NAMES || "Carlos R.,Jose L.,Ana M.")
   .split(",").map((name) => name.trim()).filter(Boolean);
+const driverAccessCodes = JSON.parse(process.env.DRIVER_ACCESS_CODES || "{}");
 
-if (!process.env.DATABASE_URL || !jwtSecret || !dispatchCode || !driverCode) {
-  throw new Error("DATABASE_URL, JWT_SECRET, DISPATCH_ACCESS_CODE and DRIVER_ACCESS_CODE are required");
+if (!process.env.DATABASE_URL || !jwtSecret || !dispatchCode) {
+  throw new Error("DATABASE_URL, JWT_SECRET and DISPATCH_ACCESS_CODE are required");
+}
+const configuredCodes = drivers.map((name) => driverAccessCodes[name]);
+if (new Set(drivers).size !== drivers.length ||
+    configuredCodes.some((code) => typeof code !== "string" || code.length < 8) ||
+    new Set(configuredCodes).size !== configuredCodes.length) {
+  throw new Error("Every driver needs a unique DRIVER_ACCESS_CODES password of at least 8 characters");
 }
 
 const pool = new Pool({
@@ -91,7 +97,8 @@ app.get("/api/config", (_req, res) => res.json({ drivers }));
 app.post("/api/login", (req, res) => {
   const role = req.body?.role === "dispatch" ? "dispatch" : "driver";
   const driver = cleanString(req.body?.driver, 100);
-  const valid = role === "dispatch" ? safeEqual(req.body?.code, dispatchCode) : safeEqual(req.body?.code, driverCode);
+  const valid = role === "dispatch" ? safeEqual(req.body?.code, dispatchCode)
+    : drivers.includes(driver) && safeEqual(req.body?.code, driverAccessCodes[driver]);
   if (!valid || (role === "driver" && !drivers.includes(driver))) return res.status(401).json({ error: "Invalid access code." });
   const token = jwt.sign({ role, driver: role === "driver" ? driver : "" }, jwtSecret, { algorithm: "HS256", expiresIn: "12h" });
   res.json({ token, role, driver: role === "driver" ? driver : "" });

@@ -34,7 +34,7 @@ async function loadConfig() {
 
 async function enter(role) {
   const code = $("accessCode").value.trim();
-  if (!code) return $("loginMessage").textContent = "Enter the access code.";
+  if (!code) return $("loginMessage").textContent = "Enter your driver password or Dispatch code.";
   $("loginMessage").textContent = "Signing in…";
   try {
     session = await api("/login", { method: "POST", body: JSON.stringify({ role, code, driver: $("loginDriver").value }) });
