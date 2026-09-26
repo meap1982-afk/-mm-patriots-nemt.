@@ -53,7 +53,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
   <div class="card">
    <div class="topline"><h2 style="margin:0">Create Trip</h2><span class="badge rt">One Way / R/T</span></div>
    <div class="row">
-    <div class="grow"><label>Patient *</label><input id="patient" autocomplete="off" placeholder="Patient name"></div>
+    <div class="grow"><label>Patient First Name *</label><input id="patientFirstName" autocomplete="given-name" maxlength="75" placeholder="First name"></div>
+    <div class="grow"><label>Patient Last Name *</label><input id="patientLastName" autocomplete="family-name" maxlength="75" placeholder="Last name"></div>
     <div class="grow"><label>Phone Number *</label><input id="phone" type="tel" autocomplete="off" placeholder="Phone number"></div>
     <div class="grow"><label>Patient Weight (lbs) *</label><input id="weight" type="number" min="1" step="1" placeholder="Weight"></div>
     <div class="grow"><label>Trip Type *</label><select id="tripType"><option>Ambulatory</option><option selected>Wheelchair</option><option>Stretcher</option></select></div>
