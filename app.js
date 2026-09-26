@@ -638,7 +638,7 @@ function folderForTrip(trip, day = todayTripDate()) {
 }
 function selectTripFolder(folder) {
   if (session?.role === "driver") return;
-  if (!["today", "upcoming", "past", "undated"].includes(folder)) return;
+  if (!["today", "pending", "upcoming", "past", "undated"].includes(folder)) return;
   tripFolder = folder;
   render();
 }
@@ -654,17 +654,20 @@ function render() {
     return;
   }
   const day = todayTripDate();
-  const folders = { today: "Today", upcoming: "Upcoming", past: "Past Trips", undated: "Date Not Set" };
-  $("tripFolderNav").innerHTML = Object.entries(folders).map(([key, label]) => `<button class="${tripFolder === key ? "primary" : "ghost"}" aria-pressed="${tripFolder === key}" onclick="selectTripFolder('${key}')">${label} (${trips.filter(trip => folderForTrip(trip, day) === key).length})</button>`).join("");
-  $("tripFolderSummary").textContent = `${folders[tripFolder]} · Today is ${tripDateLabel(day)} (Eastern Time). Past trips are saved here automatically; nothing is deleted.`;
+  const folders = { today: "Today", pending: "Pending", upcoming: "Upcoming", past: "Past Trips", undated: "Date Not Set" };
+  const matchesFolder = (trip, folder) => folder === "pending" ? !trip.cancelled && isPendingReturn(trip) : folderForTrip(trip, day) === folder;
+  $("tripFolderNav").innerHTML = Object.entries(folders).map(([key, label]) => `<button class="${tripFolder === key ? "primary" : "ghost"}" aria-pressed="${tripFolder === key}" onclick="selectTripFolder('${key}')">${label} (${trips.filter(trip => matchesFolder(trip, key)).length})</button>`).join("");
+  $("tripFolderSummary").textContent = tripFolder === "pending" ? "All pending returns, across every date. Select Dispatch Return when ready to send one to the driver." : `${folders[tripFolder]} · Today is ${tripDateLabel(day)} (Eastern Time). Past trips are saved here automatically; nothing is deleted.`;
   const olderActive = trips.filter(trip => !trip.cancelled && Number(trip.status) >= 1 && Number(trip.status) < 5 && ["past", "undated"].includes(folderForTrip(trip, day)));
   $("olderActiveTrips").innerHTML = olderActive.length ? `<div class="step current">${olderActive.length} unfinished trip(s) in Past Trips / Date Not Set. Complete or ask Dispatch to cancel them before accepting another trip.</div>` : "";
-  const scheduledTrips = trips.filter(trip => folderForTrip(trip, day) === tripFolder).sort(compareTripSchedule);
+  const scheduledTrips = trips.filter(trip => matchesFolder(trip, tripFolder)).sort(compareTripSchedule);
   const pendingReturns = scheduledTrips.filter(isPendingReturn);
   const dispatchedTrips = scheduledTrips.filter((trip) => !isPendingReturn(trip));
   $("pendingReturnTrips").innerHTML = pendingReturns.length ? pendingReturns.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No pending returns.</div>`;
   $("pendingReturnCount").textContent = pendingReturns.length;
   $("kPendingReturns").textContent = pendingReturns.length;
+  $("dispatchTrips").hidden = tripFolder === "pending";
+  $("dispatchedTripsHeading").hidden = tripFolder === "pending";
   $("dispatchTrips").innerHTML = dispatchedTrips.length ? dispatchedTrips.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No dispatched trips.</div>`;
   $("driverTrips").innerHTML = dispatchedTrips.filter(trip => !trip.cancelled).length ? dispatchedTrips.filter(trip => !trip.cancelled).map((trip) => tripCard(trip, "driver")).join("") : `<div class="card">No trips assigned to ${esc(session?.driver || "this driver")}.</div>`;
   $("kTotal").textContent = scheduledTrips.length;

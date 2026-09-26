@@ -59,3 +59,27 @@ test('driver sees current and upcoming only, cannot select history, and completi
   vm.runInContext('session={role:"dispatch"};todayTripDate=()=>"2026-09-26";render()',context);
   assert.match(elements.get('dispatchTrips').innerHTML,/CompletedPatient/);
 });
+
+
+test('Pending collects returns across all dates and removes released or cancelled returns',()=>{
+  const elements=new Map();
+  const context=vm.createContext({document:{addEventListener(){},getElementById(id){if(!elements.has(id))elements.set(id,{});return elements.get(id);}},localStorage:{getItem:()=> 'null'},window:{},console});
+  vm.runInContext(fs.readFileSync(require.resolve('../app.js'),'utf8').split('for (const leg of ["a", "b"])')[0],context);
+  vm.runInContext(`session={role:'dispatch'};todayTripDate=()=> '2026-09-26';drivers=['Test'];
+    trips=['2026-09-25','2026-09-26','2026-09-27',''].map((tripDate,i)=>({id:'return'+i,patient:'ReturnPatient'+i,tripDate,leg:'B',group:'RT-'+i,returnPending:true,status:0,driver:'Test'}));
+    trips.push({id:'pickup',patient:'PickupPatient',tripDate:'2026-09-26',leg:'A',group:'RT-1',status:0});render()`,context);
+  assert.match(elements.get('tripFolderNav').innerHTML,/Pending \(4\)/);
+  vm.runInContext('selectTripFolder("pending")',context);
+  for(let i=0;i<4;i++)assert.match(elements.get('pendingReturnTrips').innerHTML,new RegExp('ReturnPatient'+i));
+  assert.doesNotMatch(elements.get('pendingReturnTrips').innerHTML,/PickupPatient/);
+  assert.equal(elements.get('dispatchTrips').hidden,true);
+  assert.equal(elements.get('kPendingReturns').textContent,4);
+  vm.runInContext('trips[0].returnPending=false;trips[1].cancelled=true;render()',context);
+  assert.match(elements.get('tripFolderNav').innerHTML,/Pending \(2\)/);
+  assert.doesNotMatch(elements.get('pendingReturnTrips').innerHTML,/ReturnPatient0|ReturnPatient1/);
+  vm.runInContext('selectTripFolder("past")',context);
+  assert.match(elements.get('dispatchTrips').innerHTML,/ReturnPatient0/);
+  assert.equal(elements.get('dispatchTrips').hidden,false);
+  vm.runInContext('session={role:"driver"};selectTripFolder("pending")',context);
+  assert.equal(vm.runInContext('tripFolder',context),'past');
+});
