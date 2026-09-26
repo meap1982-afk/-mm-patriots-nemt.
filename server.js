@@ -70,7 +70,7 @@ function normalizeTrip(input) {
     patient: patientFirstName && patientLastName ? `${patientFirstName} ${patientLastName}` : cleanString(input.patient, 150),
     phone: cleanString(input.phone, 40),
     weight: Math.max(0, Number(input.weight || 0)), type: cleanString(input.type, 40),
-    needsWheelchair: input.needsWheelchair === "Yes" ? "Yes" : input.needsWheelchair === "No" ? "No" : input.type === "Wheelchair" ? "Yes" : "No",
+    needsWheelchair: input.needsWheelchair === "Yes" ? "Yes" : input.needsWheelchair === "No" ? "No" : ["Wheelchair", "Bariatric Wheelchair"].includes(input.type) ? "Yes" : "No",
     needsOxygen: input.needsOxygen === "Yes" ? "Yes" : "No",
     hasStairs: input.hasStairs === "Yes" ? "Yes" : input.hasStairs === "No" ? "No" : "",
     stairsCount: input.hasStairs === "Yes" ? Math.max(0, Math.min(999, Math.trunc(Number(input.stairsCount) || 0))) : 0,

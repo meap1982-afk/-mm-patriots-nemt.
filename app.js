@@ -307,7 +307,7 @@ function tripCard(t, mode) {
   const status = steps[Number(t.status || 0)] || steps[0];
   const roundTrip = String(t.group || "").startsWith("RT-");
   const tripLabel = roundTrip ? (t.leg === "B" ? "Return" : "Pick Up") : "One Way";
-  const needsWheelchair = t.needsWheelchair === "Yes" || (t.needsWheelchair == null && t.type === "Wheelchair");
+  const needsWheelchair = t.needsWheelchair === "Yes" || (t.needsWheelchair == null && ["Wheelchair", "Bariatric Wheelchair"].includes(t.type));
   const needsOxygen = t.needsOxygen === "Yes";
   const stairs = t.hasStairs === "Yes" ? `YES — ${Number(t.stairsCount) > 0 ? `${Number(t.stairsCount)} steps` : "count not specified"}` : t.hasStairs === "No" ? "NO" : "Not specified";
   const companion = t.hasCompanion === "Yes" ? "YES" : t.hasCompanion === "No" ? "NO" : "Not specified";
@@ -382,7 +382,7 @@ function updatePayerFields() {
 $("payerType").addEventListener("change", updatePayerFields);
 updatePayerFields();
 $("hasStairs").addEventListener("change", () => $("stairsCountWrap").classList.toggle("hidden", $("hasStairs").value !== "Yes"));
-$("tripType").addEventListener("change", () => { $("needsWheelchair").value = $("tripType").value === "Wheelchair" ? "Yes" : "No"; });
+$("tripType").addEventListener("change", () => { $("needsWheelchair").value = ["Wheelchair", "Bariatric Wheelchair"].includes($("tripType").value) ? "Yes" : "No"; });
 $("helperDriverWrap").classList.add("hidden");
 
 loadConfig().then(() => {
