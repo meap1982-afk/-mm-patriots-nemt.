@@ -61,6 +61,12 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
   <div class="card" id="tripForm">
    <div class="topline"><h2 id="tripFormTitle" style="margin:0">Create Trip</h2><span class="badge rt">R/T / One Way</span></div>
    <div class="row">
+    <div class="grow"><label for="aDate">Pick Up Date *</label><input id="aDate" type="date" required></div>
+    <div class="grow"><label for="aTimeType">Pick Up Time *</label><select id="aTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
+    <div class="grow" id="aTimeWrap"><label for="aTime">Scheduled Pick Up Time *</label><input id="aTime" type="time" value="08:30"></div>
+    <div class="grow"><label for="aPickType">Pick Up Location Type</label><select id="aPickType"><option>Home</option><option>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
+   </div>
+   <div class="row">
     <div class="grow"><label>Patient First Name *</label><input id="patientFirstName" autocomplete="given-name" maxlength="75" placeholder="First name"></div>
     <div class="grow"><label>Patient Last Name *</label><input id="patientLastName" autocomplete="family-name" maxlength="75" placeholder="Last name"></div>
     <div class="grow"><label>Phone Number *</label><input id="phone" type="tel" autocomplete="off" placeholder="Phone number"></div>
@@ -78,10 +84,6 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    </div>
    <h3 id="outboundHeading">Pick Up</h3>
    <div class="row">
-    <div class="grow"><label for="aDate">Trip Date *</label><input id="aDate" type="date" required></div>
-    <div class="grow"><label for="aTimeType">Pick Up Time *</label><select id="aTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
-    <div class="grow" id="aTimeWrap"><label for="aTime">Scheduled Pick Up Time *</label><input id="aTime" type="time" value="08:30"></div>
-    <div class="grow"><label>Pick Up Location Type</label><select id="aPickType"><option>Home</option><option>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
     <div class="grow"><label>Driver</label><select id="aDriver"><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
    <h4 class="address-heading">Pick Up Address *</h4>
