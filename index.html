@@ -30,9 +30,9 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
 /* Use matching accents in the form and trip cards; labels also identify each leg. */
 .leg-panel{padding:12px;border:1px solid;border-left-width:5px;border-radius:12px;margin:12px 0}
 .pickup-panel{background:#eff6ff;border-color:#93c5fd;border-left-color:#1d4ed8}
-.pickup-panel label{color:#1e40af}
+.pickup-panel label,.pickup-panel .address-heading{color:#1e40af}
 .return-panel{background:#fff7ed;border-color:#fdba74;border-left-color:#c2410c}
-.return-panel label,.return-panel h3{color:#9a3412}
+.return-panel label,.return-panel h3,.return-panel .address-heading{color:#9a3412}
 .return-panel h3{margin:0 0 6px}.return-panel .small{color:#7c2d12}
 .trip{background:#eff6ff;border-left-color:#1d4ed8}
 .trip .topline h3{color:#1e40af}
@@ -98,6 +98,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow" id="helperDriverWrap"><label>Helper Driver</label><select id="helperDriver"><option>Unassigned</option><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option></select></div>
    </div>
    <h3 id="outboundHeading">Pick Up</h3>
+   <div class="leg-panel pickup-panel" id="pickupAddressPanel">
    <h4 class="address-heading">Pick Up Address *</h4>
    <div class="row hidden" id="aPickEditWrap"><div class="grow"><label for="aPickEditAddress">Full address *</label><input id="aPickEditAddress" maxlength="300"></div><div class="grow"><label for="aPickEditRoom">Suite / Apartment / Room #</label><input id="aPickEditRoom" maxlength="80"></div></div>
    <div class="row address-fields" id="aPickCreateAddress">
@@ -108,22 +109,15 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>ZIP Code *</label><input id="aPickZip" inputmode="numeric" autocomplete="postal-code" maxlength="10" placeholder="20164"></div>
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aPickRoom" placeholder="Optional"></div>
    </div>
-   <div class="row leg-panel pickup-panel">
+   </div>
+   <div class="row leg-panel payment-panel">
     <div class="grow"><label for="aDriver">Pick Up Driver</label><select id="aDriver"><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
    <div class="row">
     <div class="grow"><label for="aDropType">Drop-off Location Type</label><select id="aDropType"><option>Home</option><option selected>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
    </div>
+   <div class="leg-panel return-panel" id="dropoffAddressPanel">
    <h4 class="address-heading">Drop-off Address *</h4>
-   <div id="returnFields" class="leg-panel return-panel">
-    <h3>Return</h3>
-    <p class="small">The return will be saved separately in Pending Returns. Dispatch sends it to the driver when ready.</p>
-    <div class="row">
-     <div class="grow"><label for="bDate">Return Date *</label><input id="bDate" type="date" required></div>
-     <div class="grow"><label for="bTimeType">Return Pick Up Time *</label><select id="bTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
-     <div class="grow" id="bTimeWrap"><label for="bTime">Scheduled Return Time *</label><input id="bTime" type="time" value="12:30"></div>
-    </div>
-   </div>
    <div class="row hidden" id="aDropEditWrap"><div class="grow"><label for="aDropEditAddress">Full address *</label><input id="aDropEditAddress" maxlength="300"></div><div class="grow"><label for="aDropEditRoom">Suite / Apartment / Room #</label><input id="aDropEditRoom" maxlength="80"></div></div>
    <div class="row address-fields" id="aDropCreateAddress">
     <div class="grow"><label>House / Building Number *</label><input id="aDropNumber" placeholder="123 or Building 5"></div>
@@ -132,6 +126,16 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>State *</label><input id="aDropState" maxlength="2" placeholder="VA"></div>
     <div class="grow"><label>ZIP Code *</label><input id="aDropZip" inputmode="numeric" maxlength="10" placeholder="20164"></div>
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aDropRoom" placeholder="Optional"></div>
+   </div>
+   </div>
+   <div id="returnFields" class="leg-panel return-panel">
+    <h3>Return</h3>
+    <p class="small">The return will be saved separately in Pending Returns. Dispatch sends it to the driver when ready.</p>
+    <div class="row">
+     <div class="grow"><label for="bDate">Return Date *</label><input id="bDate" type="date" required></div>
+     <div class="grow"><label for="bTimeType">Return Pick Up Time *</label><select id="bTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
+     <div class="grow" id="bTimeWrap"><label for="bTime">Scheduled Return Time *</label><input id="bTime" type="time" value="12:30"></div>
+    </div>
    </div>
    <div class="row leg-panel payment-panel">
     <div class="grow"><label>Payment Method</label><select id="payment"><option>Insurance / Broker</option><option>Private Pay</option><option>Credit / Debit Card</option><option>Cash</option><option>Check</option><option>Facility / Hospital</option><option>Invoice / Billing</option><option>Other</option></select></div>
@@ -144,7 +148,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Who Will Pay?</label><select id="payerType"><option value="Patient">Patient Pays</option><option value="Other">Another Person Pays</option><option value="NoPay" selected>No Pay</option></select></div>
     <div class="grow hidden" id="paymentByPhoneWrap"><label>Payment by Phone?</label><select id="paymentByPhone"><option>No</option><option>Yes</option></select></div>
    </div>
-   <div class="row leg-panel return-panel" id="returnDriverWrap">
+   <div class="row leg-panel payment-panel" id="returnDriverWrap">
      <div class="grow"><label for="bDriver">Return Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
    <div class="row leg-panel payment-panel hidden" id="payerPhoneWrap"><div class="grow"><label for="payerPhone">Payer Phone (optional)</label><input id="payerPhone" type="tel" autocomplete="tel" maxlength="40" placeholder="Phone number of the person paying"></div></div>
