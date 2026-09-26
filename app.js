@@ -6,6 +6,10 @@ let trips = [];
 let drivers = [];
 let session = JSON.parse(localStorage.getItem("mmSession") || "null");
 let polling;
+let locationTimer;
+let sharingLocation = false;
+let locationOnline = false;
+let sendingLocation = false;
 
 async function api(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
@@ -51,12 +55,18 @@ function openApp() {
   $("dispatchTab").classList.toggle("hidden", session.role !== "dispatch");
   $("driverName").textContent = `Driver: ${session.driver || ""}`;
   session.role === "dispatch" ? showDispatch() : showDriver();
+  if (session.role === "driver") startLocationSharing();
   refreshTrips();
+  if (session.role === "dispatch") refreshDriverLocations();
   clearInterval(polling);
-  polling = setInterval(refreshTrips, 5000);
+  polling = setInterval(() => {
+    refreshTrips();
+    if (session?.role === "dispatch") refreshDriverLocations();
+  }, 5000);
 }
 
 function logout() {
+  stopLocationSharing();
   clearInterval(polling);
   localStorage.removeItem("mmSession");
   session = null; trips = [];
@@ -90,6 +100,85 @@ async function refreshTrips() {
     console.error(error);
   }
 }
+
+async function refreshDriverLocations() {
+  if (session?.role !== "dispatch") return;
+  try {
+    const data = await api("/driver-locations");
+    const locations = data.locations || [];
+    $("driverLocations").innerHTML = locations.length ? locations.map((item) => {
+      const latitude = Number(item.latitude);
+      const longitude = Number(item.longitude);
+      const url = `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`;
+      return `<div class="step">📍 <b>${esc(item.driver)}</b> · updated ${esc(displayDate(item.updated_at))}
+        · accuracy ~${Math.round(Number(item.accuracy))} m
+        · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View on map</a></div>`;
+    }).join("") : '<div class="step">No drivers sharing a recent location.</div>';
+  } catch (error) {
+    $("driverLocations").textContent = "Driver locations unavailable.";
+    console.error(error);
+  }
+}
+
+function locationMessage(message) {
+  $("locationStatus").textContent = message;
+  $("shareLocation").textContent = sharingLocation ? "Go Offline" : "Go Online";
+}
+
+async function sendLocation() {
+  if (!sharingLocation || sendingLocation || document.visibilityState === "hidden") return;
+  sendingLocation = true;
+  try {
+    if (!navigator.geolocation) throw new Error("Location is unavailable on this device.");
+    const position = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true, timeout: 15000, maximumAge: 10000
+      }));
+    if (!sharingLocation) return;
+    await api("/driver-location", { method: "POST", body: JSON.stringify({
+      latitude: position.coords.latitude, longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy
+    }) });
+    if (!sharingLocation) {
+      await api("/driver-location", { method: "DELETE" });
+      return;
+    }
+    locationOnline = true;
+    locationMessage(`Online · location updated ${new Date().toLocaleTimeString()}`);
+    render();
+  } catch (error) {
+    locationOnline = false;
+    locationMessage(`Offline · location unavailable: ${error.message}`);
+    render();
+  } finally { sendingLocation = false; }
+}
+
+function startLocationSharing() {
+  if (session?.role !== "driver" || sharingLocation) return;
+  if (!window.isSecureContext) return locationMessage("Location requires an HTTPS connection.");
+  sharingLocation = true;
+  locationMessage("Requesting location permission…");
+  sendLocation();
+  locationTimer = setInterval(sendLocation, 10000);
+}
+
+function stopLocationSharing() {
+  if (!sharingLocation) return;
+  sharingLocation = false;
+  locationOnline = false;
+  clearInterval(locationTimer);
+  locationMessage("Offline · location sharing stopped.");
+  render();
+  api("/driver-location", { method: "DELETE" }).catch((error) => console.error(error));
+}
+
+function toggleLocationSharing() {
+  sharingLocation ? stopLocationSharing() : startLocationSharing();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (sharingLocation && document.visibilityState === "visible") sendLocation();
+});
 
 function loc(type, address, room) { return { type, address, room }; }
 
@@ -206,8 +295,8 @@ function tripCard(t, mode) {
     ${t.payerType === "NoPay" ? `<div class="step">No Pay</div>` : t.patientPays === "Yes" ? `<div class="step current">${t.payerType === "Patient" ? "Patient Pays" : t.payerType === "Other" ? "Another Person Pays" : "Payer"}: <b>${esc(payerName)}</b><br>Relationship to Patient: <b>${esc(t.payerRelationship || "Not specified")}</b><br>Payment by Phone: <b>${phonePayment}</b></div>` : ""}
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
     ${mode === "driver" && dialLink ? `<div class="actions"><a class="ghost call-patient" href="${esc(dialLink)}" aria-label="Call ${esc(t.patient || "patient")}">📞 CALL PATIENT</a></div>` : ""}
-    ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')">RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
-    ${mode === "driver" && Number(t.status) < 5 ? `<div class="actions"><button class="${Number(t.status) === 0 ? "success" : "primary"}" onclick="advance('${esc(t.id)}')">${Number(t.status) === 0 ? "ACCEPT TRIP" : esc(next.toUpperCase())}</button></div>` : ""}
+    ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
+    ${mode === "driver" && Number(t.status) < 5 ? `<div class="actions"><button class="${Number(t.status) === 0 ? "success" : "primary"}" onclick="advance('${esc(t.id)}')" ${locationOnline ? "" : "disabled"}>${Number(t.status) === 0 ? "ACCEPT TRIP" : esc(next.toUpperCase())}</button></div>` : ""}
     ${mode === "driver" && Number(t.status) === 5 ? `<div class="step done">✓ Trip Completed</div>` : ""}
     ${mode === "dispatch" ? `<div class="step ${Number(t.status) === 5 ? "done" : "current"}">${esc(status)}</div>${t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ Payment Collected: $${Number(t.patientAmount || 0).toFixed(2)} · ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</div>` : `<div class="step current">Payment Due: $${Number(t.patientAmount || 0).toFixed(2)} — Not Collected</div>`) : ""}` : ""}
   </div>`;
@@ -220,8 +309,12 @@ async function patchTrip(id, body) {
 
 function changeDriver(id, driver) { return patchTrip(id, { driver }); }
 function changeHelper(id, helperDriver) { return patchTrip(id, { helperDriver }); }
-function advance(id) { return patchTrip(id, { action: "advance" }); }
+function advance(id) {
+  if (!locationOnline) return alert("Go online and allow location access before updating a trip.");
+  return patchTrip(id, { action: "advance" });
+}
 function collectPayment(id) {
+  if (!locationOnline) return alert("Go online and allow location access before recording payment.");
   const trip = trips.find((item) => item.id === id);
   if (!trip || trip.paymentCollected) return;
   const paymentMethod = document.getElementById(`paymentMethod-${id}`)?.value;
