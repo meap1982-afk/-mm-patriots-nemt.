@@ -50,6 +50,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
  </div>
 
  <div class="card"><div class="topline"><h3>Notifications <span class="badge" id="notificationCount">0</span></h3><button class="ghost" id="enableSounds" onclick="enableNotificationSounds()">Enable notification sounds</button></div><p class="small" id="soundStatus">Enable sounds to hear different alerts for each trip event.</p><div id="driverNotifications" aria-live="polite"></div></div>
+ <div class="card"><h3>Trip folders</h3><div id="tripFolderNav" class="actions"></div><p id="tripFolderSummary" class="small"></p><div id="olderActiveTrips" role="status"></div></div>
  <section id="dispatch">
   <div class="kpis"><div class="kpi"><b id="kTotal">0</b>Total Trips</div><div class="kpi"><b id="kPendingReturns">0</b>Pending Returns</div><div class="kpi"><b id="kScheduled">0</b>Scheduled</div><div class="kpi"><b id="kProgress">0</b>In Progress</div><div class="kpi"><b id="kDone">0</b>Completed</div></div>
   <div class="card">
@@ -77,6 +78,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    </div>
    <h3 id="outboundHeading">Pick Up</h3>
    <div class="row">
+    <div class="grow"><label for="aDate">Trip Date *</label><input id="aDate" type="date" required></div>
     <div class="grow"><label for="aTimeType">Pick Up Time *</label><select id="aTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
     <div class="grow" id="aTimeWrap"><label for="aTime">Scheduled Pick Up Time *</label><input id="aTime" type="time" value="08:30"></div>
     <div class="grow"><label>Pick Up Location Type</label><select id="aPickType"><option>Home</option><option>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
@@ -107,6 +109,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <h3>Return</h3>
     <p class="small">The return will be saved separately in Pending Returns. Dispatch sends it to the driver when ready.</p>
     <div class="row">
+     <div class="grow"><label for="bDate">Return Date *</label><input id="bDate" type="date" required></div>
      <div class="grow"><label for="bTimeType">Return Pick Up Time *</label><select id="bTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
      <div class="grow" id="bTimeWrap"><label for="bTime">Scheduled Return Time *</label><input id="bTime" type="time" value="12:30"></div>
      <div class="grow"><label>Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>

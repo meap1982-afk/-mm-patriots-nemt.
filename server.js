@@ -56,6 +56,10 @@ function cleanString(value, max = 500) {
   return String(value == null ? "" : value).trim().slice(0, max);
 }
 
+function validTripDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && value.slice(0, 4) !== "0000" &&
+    Number.isFinite(Date.parse(value + "T12:00:00Z")) && new Date(value + "T12:00:00Z").toISOString().slice(0, 10) === value;
+}
 function normalizeTrip(input) {
   const timeType = input.timeType === "Will Call" ? "Will Call" : input.timeType === "Scheduled" || input.time ? "Scheduled" : "Will Call";
   const status = Math.max(0, Math.min(5, Number(input.status || 0)));
@@ -96,6 +100,7 @@ paymentByPhone,
 collectedBy: cleanString(input.collectedBy, 100),
 collectedAt: cleanString(input.collectedAt, 100),
     auth: cleanString(input.auth, 150), notes: cleanString(input.notes, 1500), created: Number(input.created || Date.now()),
+    tripDate: cleanString(input.tripDate, 40),
     time: timeType === "Will Call" ? "" : cleanString(input.time, 30), timeType, driver: cleanString(input.driver, 100),
     pickup: { type: cleanString(input.pickup?.type, 60), address: cleanString(input.pickup?.address, 300), room: cleanString(input.pickup?.room, 80) },
     dropoff: { type: cleanString(input.dropoff?.type, 60), address: cleanString(input.dropoff?.address, 300), room: cleanString(input.dropoff?.room, 80) },
@@ -105,6 +110,7 @@ collectedAt: cleanString(input.collectedAt, 100),
 
 function invalidTripDetails(trip) {
   return !trip.id || !trip.patient ||
+    (trip.tripDate && !validTripDate(trip.tripDate)) ||
     (Boolean(trip.patientFirstName) !== Boolean(trip.patientLastName)) ||
     !trip.pickup.address || !trip.dropoff.address ||
     (trip.timeType === "Scheduled" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(trip.time)) ||
@@ -226,6 +232,7 @@ app.patch("/api/notifications/:id/read", auth, async (req, res, next) => {
 });
 
 function visibleTrip(trip, user) {
+  if (user.role !== "dispatch" && Number(trip.status) >= 5) return null;
   if (user.role === "dispatch" || Number(trip.status) >= 2) return trip;
   return { ...trip, dropoff: null, destinationLocked: true };
 }
@@ -233,8 +240,8 @@ function visibleTrip(trip, user) {
 app.get("/api/trips", auth, async (req, res, next) => {
   try {
     const result = req.user.role === "dispatch"
-      ? await pool.query("SELECT data FROM trips ORDER BY created_at DESC")
-      : await pool.query("SELECT data FROM trips WHERE (data->>'driver'=$1 OR data->>'helperDriver'=$1) AND data->>'returnPending' IS DISTINCT FROM 'true' AND data->>'cancelled' IS DISTINCT FROM 'true' ORDER BY created_at DESC", [req.user.driver]);
+      ? await pool.query("SELECT data FROM trips ORDER BY NULLIF(data->>'tripDate','') ASC NULLS LAST, CASE WHEN data->>'timeType'='Will Call' THEN NULL ELSE NULLIF(data->>'time','') END ASC NULLS LAST, id ASC")
+      : await pool.query("SELECT data FROM trips WHERE (data->>'driver'=$1 OR data->>'helperDriver'=$1) AND data->>'returnPending' IS DISTINCT FROM 'true' AND data->>'cancelled' IS DISTINCT FROM 'true' AND COALESCE((data->>'status')::numeric,0) < 5 ORDER BY NULLIF(data->>'tripDate','') ASC NULLS LAST, CASE WHEN data->>'timeType'='Will Call' THEN NULL ELSE NULLIF(data->>'time','') END ASC NULLS LAST, id ASC", [req.user.driver]);
     res.json({ trips: result.rows.map((row) => visibleTrip(row.data, req.user)) });
   } catch (error) { next(error); }
 });
@@ -246,7 +253,7 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
     trip.returnPending = trip.leg === "B" && trip.group.startsWith("RT-");
     if (trip.returnPending) trip.status = 0;
   }
-  if (!incoming.length || incoming.some(invalidTripDetails)) {
+  if (!incoming.length || incoming.some(trip => !validTripDate(trip.tripDate) || invalidTripDetails(trip))) {
     return res.status(400).json({ error: "Required trip information is missing." });
   }
   const client = await pool.connect();
@@ -317,6 +324,10 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "This trip is not assigned to you." });
     }
+    if (req.user.role !== "dispatch" && Number(trip.status) >= 5) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "This trip is completed and no longer available to the driver." });
+    }
     if (trip.returnPending === true && (req.user.role !== "dispatch" || req.body?.action === "advance")) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "This return is pending. Dispatch must send it to the driver first." });
@@ -343,7 +354,7 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
       }
       const fields = ["patientFirstName", "patientLastName", "phone", "weight", "type", "needsWheelchair", "needsOxygen",
         "hasStairs", "stairsCount", "hasCompanion", "twoMen", "needsHelper", "helperDriver", "driver",
-        "time", "timeType", "pickup", "dropoff", "auth", "notes"];
+        "tripDate", "time", "timeType", "pickup", "dropoff", "auth", "notes"];
       if (!trip.paymentCollected) fields.push("payment", "patientPays", "payerType", "patientAmount", "paymentByPhone",
         "payerFirstName", "payerLastName", "payerRelationship", "payerPhone");
       const changes = {};

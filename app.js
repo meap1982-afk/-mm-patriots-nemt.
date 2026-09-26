@@ -6,6 +6,7 @@ let trips = [];
 let drivers = [];
 let session = JSON.parse(localStorage.getItem("mmSession") || "null");
 let polling;
+let tripFolder = "today";
 let notificationRequest = null;
 let editingTripId = null;
 let tripFormSnapshot = null;
@@ -57,6 +58,7 @@ async function enter(role) {
 }
 
 function openApp() {
+  tripFolder = "today";
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
   $("dispatchTab").classList.toggle("hidden", session.role !== "dispatch");
@@ -109,8 +111,10 @@ function showDriver() {
 
 async function refreshTrips() {
   if (!session) return;
+  const token = session.token;
   try {
     const data = await api("/trips");
+    if (session?.token !== token) return;
     trips = data.trips || [];
     setSync("online", "Synced"); render();
   } catch (error) {
@@ -372,6 +376,7 @@ async function createTrip() {
   if (payerType === "Other" && (!payerFirstName || !payerLastName || !payerRelationship))
     return alert("Enter the name and relationship of the other person making the payment.");
   for (const leg of (!editingId && $("isRT").value === "yes" ? ["a", "b"] : ["a"])) {
+    if (!validTripDate($(`${leg}Date`).value)) return alert("Choose a valid trip date for each leg.");
     if ($(`${leg}TimeType`).value === "Scheduled" && !/^([01]\d|2[0-3]):[0-5]\d$/.test($(`${leg}Time`).value))
       return alert("Choose a pick up time or select Patient will call.");
   }
@@ -391,10 +396,10 @@ async function createTrip() {
     auth: $("auth").value, notes: $("notes").value, created: now
   };
   const group = `${$("isRT").value === "yes" ? "RT" : "OW"}-${now}`;
-  const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: $("isRT").value === "yes" ? "Pick Up" : "One Way", time: $("aTimeType").value === "Will Call" ? "" : $("aTime").value, timeType: $("aTimeType").value, driver: $("aDriver").value,
+  const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: $("isRT").value === "yes" ? "Pick Up" : "One Way", tripDate: $("aDate").value, time: $("aTimeType").value === "Will Call" ? "" : $("aTime").value, timeType: $("aTimeType").value, driver: $("aDriver").value,
     pickup: loc($("aPickType").value, pickupAddress, pickup.room),
     dropoff: loc($("aDropType").value, dropoffAddress, dropoff.room), status: 0, events: [] }];
-  if (!editingId && $("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", returnPending: true, time: $("bTimeType").value === "Will Call" ? "" : $("bTime").value,
+  if (!editingId && $("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", returnPending: true, tripDate: $("bDate").value, time: $("bTimeType").value === "Will Call" ? "" : $("bTime").value,
     timeType: $("bTimeType").value, driver: $("bDriver").value,
     pickup: loc($("aDropType").value, dropoffAddress, dropoff.room),
     dropoff: loc($("aPickType").value, pickupAddress, pickup.room), status: 0, events: [] });
@@ -437,6 +442,21 @@ function isPendingReturn(trip) {
   return !trip.cancelled && trip.returnPending === true && trip.leg === "B" && String(trip.group || "").startsWith("RT-");
 }
 
+function validTripDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && value.slice(0, 4) !== "0000" &&
+    Number.isFinite(Date.parse(value + "T12:00:00Z")) && new Date(value + "T12:00:00Z").toISOString().slice(0, 10) === value;
+}
+function tripDateLabel(value) {
+  return validTripDate(value) ? new Date(value + "T12:00:00Z").toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC"
+  }) : "Date not set";
+}
+function compareTripSchedule(a, b) {
+  const date = (validTripDate(a.tripDate) ? a.tripDate : "9999-99-99").localeCompare(validTripDate(b.tripDate) ? b.tripDate : "9999-99-99");
+  const time = trip => trip.timeType === "Will Call" || !trip.time ? "99:99" : trip.time;
+  return date || time(a).localeCompare(time(b)) || String(a.id).localeCompare(String(b.id));
+}
+
 function tripAdvanceBlock(trip) {
   if (Number(trip.status || 0) === 0) {
     const assigned = [trip.driver, trip.helperDriver].filter(name => name && name !== "Unassigned");
@@ -471,6 +491,7 @@ function tripCard(t, mode) {
   const next = Number(t.status) === 4 ? "Patient dropped off / Complete trip" : Number(t.status) < 5 ? steps[Number(t.status) + 1] : "Completed";
   return `<div class="card trip ${t.leg === "B" ? "return" : ""}">
     <div class="topline"><h3>${tripLabel}</h3>${mode === "dispatch" ? `<span class="badge ${roundTrip ? "rt" : ""}">${roundTrip ? "R/T" : "One Way"}</span>` : ""}</div>
+    <div class="step"><b>📅 ${esc(tripDateLabel(t.tripDate))}</b> · ${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)}</div>
     <div><b>${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
     <div class="step ${needsWheelchair || needsOxygen ? "current" : ""}">♿ Need Wheelchair: <b>${needsWheelchair ? "YES" : "NO"}</b><br>Need Oxygen: <b>${needsOxygen ? "YES" : "NO"}</b></div>
     <div class="step ${t.hasStairs === "Yes" ? "current" : ""}">Stairs: <b>${stairs}</b></div>
@@ -524,6 +545,7 @@ function editTrip(id) {
     hasStairs: trip.hasStairs || "No", stairsCount: trip.stairsCount || "",
     isRT: String(trip.group || "").startsWith("RT-") ? "yes" : "no", twoMen: trip.twoMen || "No", needsHelper: trip.needsHelper || "No",
     helperDriver: trip.helperDriver || "Unassigned",
+    aDate: trip.tripDate || "",
     aTimeType: trip.timeType === "Will Call" || !trip.time ? "Will Call" : "Scheduled", aTime: trip.time || "",
     aDriver: trip.driver || "Unassigned", aPickType: trip.pickup?.type || "Other", aDropType: trip.dropoff?.type || "Other",
     aPickEditAddress: trip.pickup?.address, aPickEditRoom: trip.pickup?.room,
@@ -605,18 +627,50 @@ function collectPayment(id) {
   if (!confirm(`Confirm that $${Number(trip.patientAmount || 0).toFixed(2)} was collected from ${trip.patient} by ${paymentMethod}?`)) return;
   return patchTrip(id, { action: "collectPayment", paymentMethod });
 }
+function todayTripDate() {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const value = type => parts.find(part => part.type === type).value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+function folderForTrip(trip, day = todayTripDate()) {
+  if (!validTripDate(trip.tripDate)) return "undated";
+  return trip.tripDate < day ? "past" : trip.tripDate > day ? "upcoming" : "today";
+}
+function selectTripFolder(folder) {
+  if (session?.role === "driver") return;
+  if (!["today", "upcoming", "past", "undated"].includes(folder)) return;
+  tripFolder = folder;
+  render();
+}
 function render() {
-  const pendingReturns = trips.filter(isPendingReturn);
-  const dispatchedTrips = trips.filter((trip) => !isPendingReturn(trip));
+  if (session?.role === "driver") {
+    const available = trips.filter(trip => !trip.cancelled && !isPendingReturn(trip) && Number(trip.status || 0) < 5).sort(compareTripSchedule);
+    const current = available.filter(trip => Number(trip.status || 0) > 0);
+    const upcoming = available.filter(trip => Number(trip.status || 0) === 0);
+    $("tripFolderNav").innerHTML = `<span class="badge">Current (${current.length})</span><span class="badge">Upcoming (${upcoming.length})</span>`;
+    $("tripFolderSummary").textContent = "Only your current and upcoming trips are shown. Completed trips are kept by Dispatch.";
+    $("olderActiveTrips").innerHTML = "";
+    $("driverTrips").innerHTML = `<h2>Current Trip</h2>${current.length ? current.map(trip => tripCard(trip, "driver")).join("") : '<div class="card">No trip in progress.</div>'}<h2>Upcoming Trips</h2>${upcoming.length ? upcoming.map(trip => tripCard(trip, "driver")).join("") : '<div class="card">No upcoming trips.</div>'}`;
+    return;
+  }
+  const day = todayTripDate();
+  const folders = { today: "Today", upcoming: "Upcoming", past: "Past Trips", undated: "Date Not Set" };
+  $("tripFolderNav").innerHTML = Object.entries(folders).map(([key, label]) => `<button class="${tripFolder === key ? "primary" : "ghost"}" aria-pressed="${tripFolder === key}" onclick="selectTripFolder('${key}')">${label} (${trips.filter(trip => folderForTrip(trip, day) === key).length})</button>`).join("");
+  $("tripFolderSummary").textContent = `${folders[tripFolder]} · Today is ${tripDateLabel(day)} (Eastern Time). Past trips are saved here automatically; nothing is deleted.`;
+  const olderActive = trips.filter(trip => !trip.cancelled && Number(trip.status) >= 1 && Number(trip.status) < 5 && ["past", "undated"].includes(folderForTrip(trip, day)));
+  $("olderActiveTrips").innerHTML = olderActive.length ? `<div class="step current">${olderActive.length} unfinished trip(s) in Past Trips / Date Not Set. Complete or ask Dispatch to cancel them before accepting another trip.</div>` : "";
+  const scheduledTrips = trips.filter(trip => folderForTrip(trip, day) === tripFolder).sort(compareTripSchedule);
+  const pendingReturns = scheduledTrips.filter(isPendingReturn);
+  const dispatchedTrips = scheduledTrips.filter((trip) => !isPendingReturn(trip));
   $("pendingReturnTrips").innerHTML = pendingReturns.length ? pendingReturns.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No pending returns.</div>`;
   $("pendingReturnCount").textContent = pendingReturns.length;
   $("kPendingReturns").textContent = pendingReturns.length;
   $("dispatchTrips").innerHTML = dispatchedTrips.length ? dispatchedTrips.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No dispatched trips.</div>`;
   $("driverTrips").innerHTML = dispatchedTrips.filter(trip => !trip.cancelled).length ? dispatchedTrips.filter(trip => !trip.cancelled).map((trip) => tripCard(trip, "driver")).join("") : `<div class="card">No trips assigned to ${esc(session?.driver || "this driver")}.</div>`;
-  $("kTotal").textContent = trips.length;
+  $("kTotal").textContent = scheduledTrips.length;
   $("kScheduled").textContent = dispatchedTrips.filter((trip) => !trip.cancelled && Number(trip.status) < 1).length;
-  $("kProgress").textContent = trips.filter((trip) => !trip.cancelled && Number(trip.status) > 0 && Number(trip.status) < 5).length;
-  $("kDone").textContent = trips.filter((trip) => !trip.cancelled && Number(trip.status) === 5).length;
+  $("kProgress").textContent = scheduledTrips.filter((trip) => !trip.cancelled && Number(trip.status) > 0 && Number(trip.status) < 5).length;
+  $("kDone").textContent = scheduledTrips.filter((trip) => !trip.cancelled && Number(trip.status) === 5).length;
 }
 
 function updatePickupTime(leg) {
@@ -628,6 +682,15 @@ for (const leg of ["a", "b"]) {
   $(`${leg}TimeType`).addEventListener("change", () => updatePickupTime(leg));
   updatePickupTime(leg);
 }
+
+const todayDate = todayTripDate();
+$("aDate").value = todayDate;
+$("bDate").value = todayDate;
+let previousPickupDate = todayDate;
+$("aDate").addEventListener("change", () => {
+  if (!editingTripId && $("bDate").value === previousPickupDate) $("bDate").value = $("aDate").value;
+  previousPickupDate = $("aDate").value;
+});
 
 function updateTripService() {
   const oneWay = $("isRT").value === "no";

@@ -33,10 +33,25 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal(health.status, 200);
     assert.equal(health.data.version, 'driver-location-v1');
     const dispatch = (await request('/login', null, 'POST', { role: 'dispatch', code: 'dispatch-test' })).data.token;
-    const tripInput = { id: 'pickup-time-test', patient: 'Test Patient', pickup: { address: 'Test pickup' }, dropoff: { address: 'Test dropoff' }, timeType: 'Scheduled', time: '09:15' };
+    const tripInput = { id: 'pickup-time-test', tripDate: '2026-09-26', patient: 'Test Patient', pickup: { address: 'Test pickup' }, dropoff: { address: 'Test dropoff' }, timeType: 'Scheduled', time: '09:15' };
     let saved = await request('/trips', dispatch, 'POST', { trips: [tripInput] });
     assert.equal(saved.status, 201);
     assert.equal(saved.data.trips[0].time, '09:15');
+    assert.equal(saved.data.trips[0].tripDate, '2026-09-26');
+    for (const tripDate of ['', '2026-02-30', '2026-13-01', '2026-09-26extra']) {
+      assert.equal((await request('/trips', dispatch, 'POST', { trips: [{...tripInput, tripDate}] })).status, 400);
+    }
+    const dates = [
+      {...tripInput,id:'date-next',tripDate:'2026-09-28',time:'08:00'},
+      {...tripInput,id:'date-late',tripDate:'2026-09-27',time:'15:00'},
+      {...tripInput,id:'date-call',tripDate:'2026-09-27',timeType:'Will Call'},
+      {...tripInput,id:'date-early',tripDate:'2026-09-27',time:'09:00'}
+    ];
+    for (const trip of dates) assert.equal((await request('/trips',dispatch,'POST',{trips:[trip]})).status,201);
+    assert.deepEqual((await request('/trips',dispatch)).data.trips.filter(t=>t.id.startsWith('date-')).map(t=>t.id),['date-early','date-late','date-call','date-next']);
+    assert.equal((await request('/trips/date-next',dispatch,'PATCH',{action:'edit',trip:{tripDate:'2026-02-30'}})).status,400);
+    assert.equal((await request('/trips/date-next',dispatch,'PATCH',{action:'edit',trip:{tripDate:'2026-09-25'}})).data.trip.tripDate,'2026-09-25');
+
     saved = await request('/trips', dispatch, 'POST', { trips: [{ ...tripInput, timeType: 'Will Call' }] });
     assert.equal(saved.status, 201);
     assert.equal(saved.data.trips[0].time, '');
@@ -173,7 +188,15 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
       }
     }
     assert.ok(!(await request('/notifications', dispatch)).data.notifications.some(n => n.trip_id === 'dropoff-test' && n.kind === 'dropped_off'));
-    assert.equal((await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' })).status, 200);
+    const completedTrip = await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' });
+    assert.equal(completedTrip.status, 200);
+    assert.equal(completedTrip.data.trip, null);
+    assert.ok(!(await request('/trips', first)).data.trips.some(t => t.id === 'dropoff-test'));
+    assert.equal((await request('/trips', dispatch)).data.trips.find(t => t.id === 'dropoff-test').status, 5);
+    assert.equal((await request('/trips/dropoff-test', first, 'PATCH', { action: 'collectPayment', paymentMethod:'Cash' })).status, 400);
+    await query("INSERT INTO trips (id,data) VALUES ($1,$2)", ['helper-completed', {...tripInput,id:'helper-completed',driver:'Unassigned',helperDriver:'Test Driver',status:5}]);
+    assert.ok(!(await request('/trips', first)).data.trips.some(t => t.id === 'helper-completed'));
+
     assert.equal((await request('/trips/dropoff-test', first, 'PATCH', { action: 'advance' })).status, 400);
     dispatchNotices = (await request('/notifications', dispatch)).data.notifications.filter(n => n.trip_id === 'dropoff-test');
     assert.equal(dispatchNotices.filter(n => n.kind === 'accepted').length, 1);
@@ -218,7 +241,7 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'advance' })).status, 200);
     await query("UPDATE driver_locations SET recorded_at=NOW() - INTERVAL '2 minutes'");
     assert.equal((await request('/driver-locations', dispatch)).data.locations[0].current, false);
-    assert.equal((await request('/trips/trip', first, 'PATCH', { action: 'advance' })).status, 409);
+    assert.equal((await request('/trips/pending-A', first, 'PATCH', { action: 'advance' })).status, 409);
     assert.equal((await request('/driver-location', first, 'DELETE')).status, 200);
     assert.equal((await request('/driver-location', first, 'POST', fix())).status, 401);
     assert.equal((await request('/driver-locations', dispatch)).data.locations.length, 0);

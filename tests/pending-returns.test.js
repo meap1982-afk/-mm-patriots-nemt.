@@ -16,6 +16,7 @@ test('pending returns render separately and are withheld from the driver until d
   const source = fs.readFileSync(require.resolve('../app.js'), 'utf8').split('for (const leg of ["a", "b"])')[0];
   vm.runInContext(source, context);
   vm.runInContext(`
+    tripFolder = 'undated';
     drivers = ['Test Driver'];
     trips = [
       { id: 'a', group: 'RT-test', leg: 'A', patient: 'Outbound Patient', driver: 'Test Driver', status: 0 },

@@ -32,7 +32,7 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   vm.runInContext(fs.readFileSync(require.resolve('../app.js'), 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
   fields.get('patientFirstName').value = 'Unsaved draft';
-  const original = { id: 'return-b', group: 'RT-test', leg: 'B', returnPending: true, status: 0,
+  const original = { id: 'return-b', tripDate: '2026-09-28', group: 'RT-test', leg: 'B', returnPending: true, status: 0,
     patientFirstName: 'Test', patientLastName: 'Patient', patient: 'Test Patient', phone: '5555550100',
     driver: 'Test Driver', type: 'Bariatric Wheelchair', payerType: 'Other', patientPays: 'Yes', payerFirstName: 'Pay', payerLastName: 'Person', payerRelationship: 'Friend', payerPhone: '+1 (555) 555-0123', timeType: 'Will Call',
     pickup: { type: 'Hospital', address: '123 Hospital Road, Town, VA 20164', room: '4' },
@@ -47,12 +47,15 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   assert.equal(fields.get('returnFields').classList.contains('hidden'), true);
   assert.equal(fields.get('payerPhone').value, original.payerPhone);
   fields.get('payerPhone').value = '+1 (555) 555-0456';
+  assert.equal(fields.get('aDate').value, '2026-09-28');
+  fields.get('aDate').value = '2026-09-29';
   fields.get('notes').value = 'Changed return';
   await vm.runInContext('createTrip()', context);
   const edit = calls.find(c => c.method === 'PATCH');
   assert.equal(edit.url, '/api/trips/return-b');
   assert.equal(JSON.parse(edit.body).action, 'edit');
   assert.equal(JSON.parse(edit.body).trip.notes, 'Changed return');
+  assert.equal(JSON.parse(edit.body).trip.tripDate, '2026-09-29');
   assert.equal(JSON.parse(edit.body).trip.payerPhone, '+1 (555) 555-0456');
   assert.equal(JSON.parse(edit.body).trip.pickup.address, original.pickup.address);
   assert.equal(JSON.parse(edit.body).trip.time, '');
@@ -116,4 +119,26 @@ test('driver buttons explain drop-off and payment blocks without blocking collec
   assert.equal(vm.runInContext('tripAdvanceBlock({...due,group:"RT-pair",leg:"A"})',context),'');
   assert.notEqual(vm.runInContext('tripAdvanceBlock({...due,group:"RT-pair",leg:"B"})',context),'');
   assert.equal(vm.runInContext('tripAdvanceBlock({...due,patientPays:"No"})',context),'');
+});
+
+
+test('trip schedules sort by service date and time with will-call and undated trips last', () => {
+  const elements = new Map();
+  const context = vm.createContext({document:{addEventListener(){},getElementById(id){if(!elements.has(id))elements.set(id,{});return elements.get(id);}}, localStorage:{getItem:()=> 'null'},window:{},console});
+  vm.runInContext(fs.readFileSync(require.resolve('../app.js'),'utf8').split('for (const leg of ["a", "b"])')[0],context);
+  vm.runInContext(`trips=[
+    {id:'undated',patient:'Undated',status:0},
+    {id:'tomorrow',patient:'Tomorrow',tripDate:'2026-10-02',time:'08:00',status:0},
+    {id:'call',patient:'CallLater',tripDate:'2026-10-01',timeType:'Will Call',status:0},
+    {id:'late',patient:'Afternoon',tripDate:'2026-10-01',time:'15:00',status:0},
+    {id:'early',patient:'Morning',tripDate:'2026-10-01',time:'08:00',status:0}];todayTripDate=()=> '2026-09-26';tripFolder='upcoming';render()`,context);
+  for (const id of ['dispatchTrips','driverTrips']) {
+    const html=elements.get(id).innerHTML;
+    const positions=['Morning','Afternoon','CallLater','Tomorrow'].map(name=>html.indexOf(name));
+    assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));
+    assert.match(html,/Thu, Oct 1, 2026/);
+    assert.doesNotMatch(html,/Undated/);
+  }
+  assert.equal(vm.runInContext('validTripDate("2028-02-29")',context),true);
+  assert.equal(vm.runInContext('validTripDate("2026-02-29")',context),false);
 });
