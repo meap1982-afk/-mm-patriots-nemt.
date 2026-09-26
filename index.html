@@ -58,19 +58,19 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Phone Number *</label><input id="phone" type="tel" autocomplete="off" placeholder="Phone number"></div>
     <div class="grow"><label>Patient Weight (lbs) *</label><input id="weight" type="number" min="1" step="1" placeholder="Weight"></div>
     <div class="grow"><label>Trip Type *</label><select id="tripType"><option>Ambulatory</option><option selected>Wheelchair</option><option>Stretcher</option></select></div>
-    <div class="grow"><label>Round Trip?</label><select id="isRT"><option value="yes">R/T — Trip A + Trip B</option><option value="no">One Way — Trip A only</option></select></div>
+    <div class="grow"><label>Round Trip?</label><select id="isRT"><option value="yes">Pick Up + Return</option><option value="no">Pick Up Only</option></select></div>
     <div class="grow"><label>Two-Men Team</label><select id="twoMen"><option>No</option><option>Yes</option></select></div>
     <div class="grow"><label>Does Patient Need Helper?</label><select id="needsHelper"><option value="No">No</option><option value="Yes">Yes</option></select></div>
     <div class="grow" id="helperDriverWrap"><label>Helper Driver</label><select id="helperDriver"><option>Unassigned</option><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option></select></div>
    </div>
-   <h3>Trip A — Pickup / Outbound</h3>
+   <h3>Pick Up</h3>
    <div class="row">
-    <div class="grow"><label>Pickup Time *</label><input id="aTime" type="time" value="08:30"></div>
-    <div class="grow"><label>Pickup Location Type</label><select id="aPickType"><option>Home</option><option>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
+    <div class="grow"><label>Pick Up Time *</label><input id="aTime" type="time" value="08:30"></div>
+    <div class="grow"><label>Pick Up Location Type</label><select id="aPickType"><option>Home</option><option>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
     <div class="grow"><label>Drop-off Location Type</label><select id="aDropType"><option>Home</option><option selected>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
     <div class="grow"><label>Driver</label><select id="aDriver"><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
-   <h4 class="address-heading">Pickup Address *</h4>
+   <h4 class="address-heading">Pick Up Address *</h4>
    <div class="row address-fields">
     <div class="grow"><label>House / Building Number *</label><input id="aPickNumber" autocomplete="address-line1" placeholder="123 or Building 5"></div>
     <div class="grow street"><label>Street Name *</label><input id="aPickStreet" autocomplete="address-line2" placeholder="Main Street"></div>
@@ -89,9 +89,9 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aDropRoom" placeholder="Optional"></div>
    </div>
    <div id="returnFields">
-    <h3>Trip B — Return</h3>
+    <h3>Return</h3>
     <div class="row">
-     <div class="grow"><label>Return Pickup Time</label><input id="bTime" type="time" value="12:30"></div>
+     <div class="grow"><label>Return Pick Up Time</label><input id="bTime" type="time" value="12:30"></div>
      <div class="grow"><label>Return Time Type</label><select id="bTimeType"><option>Scheduled</option><option>Will Call</option></select></div>
      <div class="grow"><label>Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
     </div>
