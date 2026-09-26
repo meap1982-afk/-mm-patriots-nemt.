@@ -122,7 +122,7 @@ app.post("/api/login", (req, res) => {
 app.get("/api/driver-locations", auth, dispatchOnly, async (_req, res, next) => {
   try {
     const result = await pool.query(
-      "SELECT driver, latitude, longitude, accuracy, updated_at FROM driver_locations WHERE updated_at > NOW() - INTERVAL '60 seconds' ORDER BY driver"
+      "SELECT driver, latitude, longitude, accuracy, updated_at, (updated_at > NOW() - INTERVAL '60 seconds') AS current FROM driver_locations WHERE updated_at > NOW() - INTERVAL '24 hours' ORDER BY driver"
     );
     res.json({ locations: result.rows });
   } catch (error) { next(error); }
