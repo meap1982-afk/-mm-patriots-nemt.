@@ -93,9 +93,33 @@ async function refreshTrips() {
 
 function loc(type, address, room) { return { type, address, room }; }
 
+function addressFields(prefix) {
+  const value = (suffix) => $(`${prefix}${suffix}`).value.trim();
+  return {
+    number: value("Number"), street: value("Street"), city: value("City"),
+    state: value("State").toUpperCase(), zip: value("Zip"), room: value("Room")
+  };
+}
+
+function addressText(fields) {
+  return `${fields.number} ${fields.street}, ${fields.city}, ${fields.state} ${fields.zip}`;
+}
+
+function addressLink(location) {
+  const address = String(location?.address || "").trim();
+  if (!address) return "";
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(address)} in Maps">${esc(address)}</a>${location?.room ? `, ${esc(location.room)}` : ""}`;
+}
+
 async function createTrip() {
-  const required = [$("patient").value, $("phone").value, $("aPick").value, $("aDrop").value];
-  if (required.some((value) => !value.trim())) return alert("Patient, phone, pickup address and drop-off address are required.");
+  const pickup = addressFields("aPick");
+  const dropoff = addressFields("aDrop");
+  const required = [$("patient").value, $("phone").value,
+    ...[pickup, dropoff].flatMap(({ number, street, city, state, zip }) => [number, street, city, state, zip])];
+  if (required.some((value) => !value.trim())) return alert("Patient, phone, and all address fields except suite/apartment are required.");
+  if (![pickup, dropoff].every(({ state, zip }) => /^[A-Z]{2}$/.test(state) && /^\d{5}(-\d{4})?$/.test(zip)))
+    return alert("Use a two-letter state and a 5-digit ZIP code (or ZIP+4).");
   const now = Date.now();
   const base = {
     patient: $("patient").value, phone: $("phone").value, weight: Number($("weight").value || 0), type: $("tripType").value,
@@ -109,12 +133,12 @@ async function createTrip() {
   };
   const group = `${$("isRT").value === "yes" ? "RT" : "OW"}-${now}`;
   const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: "Pickup / Outbound", time: $("aTime").value, driver: $("aDriver").value,
-    pickup: loc($("aPickType").value, $("aPick").value, $("aPickRoom").value),
-    dropoff: loc($("aDropType").value, $("aDrop").value, $("aDropRoom").value), status: 0, events: [] }];
+    pickup: loc($("aPickType").value, addressText(pickup), pickup.room),
+    dropoff: loc($("aDropType").value, addressText(dropoff), dropoff.room), status: 0, events: [] }];
   if ($("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", time: $("bTime").value,
     timeType: $("bTimeType").value, driver: $("bDriver").value,
-    pickup: loc($("aDropType").value, $("aDrop").value, $("aDropRoom").value),
-    dropoff: loc($("aPickType").value, $("aPick").value, $("aPickRoom").value), status: 0, events: [] });
+    pickup: loc($("aDropType").value, addressText(dropoff), dropoff.room),
+    dropoff: loc($("aPickType").value, addressText(pickup), pickup.room), status: 0, events: [] });
   try {
     setSync("", "Saving…");
     await api("/trips", { method: "POST", body: JSON.stringify({ trips: newTrips }) });
@@ -141,7 +165,7 @@ function tripCard(t, mode) {
     <div class="topline"><h3>Trip ${esc(t.leg)} — ${esc(t.label)}</h3><span class="badge ${t.leg === "B" ? "rt" : ""}">${String(t.group).startsWith("RT-") ? "R/T" : "One Way"}</span></div>
     <div><b>${esc(t.time || "Will Call")} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
     ${t.needsHelper === "Yes" ? `<div class="meta">🧑‍🤝‍🧑 <b>Helper Driver:</b> ${esc(t.helperDriver || "Unassigned")}</div>` : ""}
-    <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${esc(t.pickup?.address)} ${esc(t.pickup?.room)}<br>🏁 ${esc(t.dropoff?.type)} — ${esc(t.dropoff?.address)} ${esc(t.dropoff?.room)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Patient Pays: YES — $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Patient Pays: NO"}</div>
+    <div class="meta">📞 <b>${esc(t.phone || "No phone")}</b>${t.weight ? ` · ⚖️ <b>${Number(t.weight)} lbs</b>` : ""}<br>📍 ${esc(t.pickup?.type)} — ${addressLink(t.pickup)}<br>🏁 ${esc(t.dropoff?.type)} — ${addressLink(t.dropoff)}<br>💳 ${esc(t.payment)} · ${esc(t.payStatus)}<br>${t.patientPays === "Yes" ? `💵 <b>Patient Pays: YES — $${Number(t.patientAmount || 0).toFixed(2)}</b>` : "💵 Patient Pays: NO"}</div>
     ${mode === "dispatch" ? `<label>Driver — change independently</label><select onchange="changeDriver('${esc(t.id)}',this.value)">${options}</select>${t.needsHelper === "Yes" ? `<label>Helper Driver — change independently</label><select onchange="changeHelper('${esc(t.id)}',this.value)">${helperOptions}</select>` : ""}` : `<div class="step current">${esc(status)}</div>`}
     ${mode === "driver" && t.phone ? `<div class="actions"><button class="ghost" onclick="window.location.href='tel:${esc(t.phone)}'">📞 CALL PATIENT</button></div>` : ""}
     ${mode === "driver" && t.patientPays === "Yes" ? (t.paymentCollected ? `<div class="step done">✓ PAYMENT COLLECTED — $${Number(t.patientAmount || 0).toFixed(2)}<br><span class="small">Collected by ${esc(t.collectedBy)} · ${esc(displayDate(t.collectedAt))}</span></div>` : `<div class="actions"><select id="paymentMethod-${esc(t.id)}" aria-label="Payment method"><option value="">Select payment method</option><option>Cash</option><option>Check</option><option>Credit Card</option></select><button class="success" onclick="collectPayment('${esc(t.id)}')">RECORD PAYMENT — ${Number(t.patientAmount || 0).toFixed(2)}</button></div>`) : ""}
