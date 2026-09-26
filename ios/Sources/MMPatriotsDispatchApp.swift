@@ -17,6 +17,7 @@ struct MMPatriotsDispatchApp: App {
 
 struct ContentView: View {
     @EnvironmentObject private var location: DriverLocationService
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("dispatchServerURL") private var serverURL = ""
     @State private var enteredURL = ""
     @State private var error = ""
@@ -30,6 +31,7 @@ struct ContentView: View {
     }
 
     var body: some View {
+        Group {
         if let url = configuredURL {
             VStack(spacing: 0) {
                 HStack {
@@ -65,6 +67,10 @@ struct ContentView: View {
                 }
             }
             .onAppear { enteredURL = serverURL }
+        }
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { location.refresh() }
         }
     }
 }
@@ -165,6 +171,10 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
         }
     }
 
+    func refresh() {
+        if active { manager.requestLocation() }
+    }
+
     func checkOut() {
         let oldToken = token
         active = false
@@ -248,7 +258,10 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
         var request = URLRequest(url: baseURL.appendingPathComponent("api/driver-location"))
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        URLSession.shared.dataTask(with: request).resume()
+        let task = UIApplication.shared.beginBackgroundTask(withName: "Stop Driver Location")
+        URLSession.shared.dataTask(with: request) { _, _, _ in
+            UIApplication.shared.endBackgroundTask(task)
+        }.resume()
     }
 
     private func report(_ online: Bool, _ message: String) {
