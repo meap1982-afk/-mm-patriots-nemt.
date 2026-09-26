@@ -69,6 +69,8 @@ function normalizeTrip(input) {
     weight: Math.max(0, Number(input.weight || 0)), type: cleanString(input.type, 40),
     needsWheelchair: input.needsWheelchair === "Yes" ? "Yes" : input.needsWheelchair === "No" ? "No" : input.type === "Wheelchair" ? "Yes" : "No",
     needsOxygen: input.needsOxygen === "Yes" ? "Yes" : "No",
+    hasStairs: input.hasStairs === "Yes" ? "Yes" : input.hasStairs === "No" ? "No" : "",
+    stairsCount: input.hasStairs === "Yes" ? Math.max(0, Math.min(999, Math.trunc(Number(input.stairsCount) || 0))) : 0,
     twoMen: cleanString(input.twoMen, 5),
     needsHelper: cleanString(input.needsHelper, 5), helperDriver: cleanString(input.helperDriver, 100),
     paymentSource: cleanString(input.paymentSource, 30),
@@ -120,7 +122,8 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
   const incoming = Array.isArray(req.body?.trips) ? req.body.trips.slice(0, 2).map(normalizeTrip) : [];
   if (!incoming.length || incoming.some((trip) => !trip.id || !trip.patient ||
       (Boolean(trip.patientFirstName) !== Boolean(trip.patientLastName)) ||
-      !trip.pickup.address || !trip.dropoff.address)) {
+      !trip.pickup.address || !trip.dropoff.address ||
+      (trip.hasStairs === "Yes" && trip.stairsCount < 1))) {
     return res.status(400).json({ error: "Required trip information is missing." });
   }
   const client = await pool.connect();
