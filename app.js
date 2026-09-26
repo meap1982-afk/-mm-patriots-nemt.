@@ -8,6 +8,8 @@ let session = JSON.parse(localStorage.getItem("mmSession") || "null");
 let polling;
 let tripFolder = "today";
 let notificationRequest = null;
+let driverInboxOpen = false;
+let unreadNotificationCount = 0;
 let editingTripId = null;
 let tripFormSnapshot = null;
 let savingTrip = false;
@@ -58,6 +60,9 @@ async function enter(role) {
 }
 
 function openApp() {
+  driverInboxOpen = false;
+  unreadNotificationCount = 0;
+  updateNotificationView();
   tripFolder = "today";
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
@@ -198,6 +203,23 @@ function announceNotifications(notices) {
   try { localStorage.setItem(scope, JSON.stringify([...soundedEvents].slice(-5000))); } catch {}
 }
 
+function updateNotificationView() {
+  const driver = session?.role === "driver";
+  $("notificationControls").hidden = driver;
+  const button = $("newNotificationButton");
+  button.hidden = !driver;
+  button.className = unreadNotificationCount > 0 ? "danger" : "success";
+  button.ariaExpanded = String(driverInboxOpen);
+  button.ariaLabel = `Notificación nueva: ${unreadNotificationCount} sin leer`;
+  $("driverNotifications").hidden = driver && !driverInboxOpen;
+}
+function toggleDriverNotifications() {
+  driverInboxOpen = !driverInboxOpen;
+  updateNotificationView();
+  if (driverInboxOpen && !window.nativeTripNotifications) enableNotificationSounds();
+  refreshNotifications();
+}
+
 async function refreshNotifications() {
   if (!session || notificationRequest === session.token) return;
   const token = session.token;
@@ -206,6 +228,8 @@ async function refreshNotifications() {
     const data = await api("/notifications");
     if (session?.token !== token) return;
     const notices = data.notifications || [];
+    unreadNotificationCount = notices.length;
+    updateNotificationView();
     announceNotifications(notices);
     $("notificationCount").textContent = notices.length;
     $("driverNotifications").innerHTML = notices.length ? notices.map(item =>

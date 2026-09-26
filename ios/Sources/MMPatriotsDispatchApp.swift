@@ -49,11 +49,7 @@ struct ContentView: View {
                     HStack {
                         Text(location.status).font(.caption)
                         Spacer()
-                        Button("Settings") {
-                            if let settings = URL(string: UIApplication.openSettingsURLString) {
-                                UIApplication.shared.open(settings)
-                            }
-                        }
+
                     }.padding(10)
                 }
                 WebContainer(baseURL: url, location: location)
@@ -105,6 +101,7 @@ struct WebContainer: UIViewRepresentable {
         location.webView = webView
         location.baseURL = baseURL
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.load(URLRequest(url: baseURL))
         return webView
     }
@@ -115,7 +112,7 @@ struct WebContainer: UIViewRepresentable {
         view.configuration.userContentController.removeScriptMessageHandler(forName: "driverLocation")
     }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
         let baseURL: URL
         let location: DriverLocationService
         weak var webView: WKWebView?
@@ -123,6 +120,38 @@ struct WebContainer: UIViewRepresentable {
         init(baseURL: URL, location: DriverLocationService) {
             self.baseURL = baseURL
             self.location = location
+        }
+
+        private func dialogPresenter(for webView: WKWebView) -> UIViewController? {
+            guard var presenter = webView.window?.rootViewController else { return nil }
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            guard !presenter.isBeingDismissed, !(presenter is UIAlertController) else { return nil }
+            return presenter
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+            guard let presenter = dialogPresenter(for: webView) else {
+                completionHandler(false)
+                return
+            }
+            let dialog = UIAlertController(title: "Dispatch", message: message, preferredStyle: .alert)
+            dialog.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(false) })
+            dialog.addAction(UIAlertAction(title: "Confirm", style: .default) { _ in completionHandler(true) })
+            presenter.present(dialog, animated: true)
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+            guard let presenter = dialogPresenter(for: webView) else {
+                completionHandler()
+                return
+            }
+            let dialog = UIAlertController(title: "Dispatch", message: message, preferredStyle: .alert)
+            dialog.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler() })
+            presenter.present(dialog, animated: true)
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
