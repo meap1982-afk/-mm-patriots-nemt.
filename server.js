@@ -118,6 +118,44 @@ app.post("/api/login", (req, res) => {
   res.json({ token, role, driver: role === "driver" ? driver : "" });
 });
 
+// Only Dispatch can read recent positions. Drivers explicitly start and stop sharing.
+app.get("/api/driver-locations", auth, dispatchOnly, async (_req, res, next) => {
+  try {
+    const result = await pool.query(
+      "SELECT driver, latitude, longitude, accuracy, updated_at FROM driver_locations WHERE updated_at > NOW() - INTERVAL '60 seconds' ORDER BY driver"
+    );
+    res.json({ locations: result.rows });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/driver-location", auth, async (req, res, next) => {
+  if (req.user.role !== "driver" || !drivers.includes(req.user.driver))
+    return res.status(403).json({ error: "Driver access required." });
+  const latitude = Number(req.body?.latitude);
+  const longitude = Number(req.body?.longitude);
+  const accuracy = Number(req.body?.accuracy);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 180 ||
+      !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100000)
+    return res.status(400).json({ error: "Invalid location." });
+  try {
+    await pool.query(
+      "INSERT INTO driver_locations (driver, latitude, longitude, accuracy, updated_at) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (driver) DO UPDATE SET latitude=$2, longitude=$3, accuracy=$4, updated_at=NOW()",
+      [req.user.driver, latitude, longitude, accuracy]
+    );
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/driver-location", auth, async (req, res, next) => {
+  if (req.user.role !== "driver")
+    return res.status(403).json({ error: "Driver access required." });
+  try {
+    await pool.query("DELETE FROM driver_locations WHERE driver=$1", [req.user.driver]);
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
 app.get("/api/trips", auth, async (req, res, next) => {
   try {
     const result = req.user.role === "dispatch"
@@ -173,6 +211,16 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
     if (req.user.role !== "dispatch" && !assigned) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "This trip is not assigned to you." });
+    }
+    if (req.user.role === "driver" && ["advance", "collectPayment"].includes(req.body?.action)) {
+      const online = await client.query(
+        "SELECT 1 FROM driver_locations WHERE driver=$1 AND updated_at > NOW() - INTERVAL '60 seconds'",
+        [req.user.driver]
+      );
+      if (!online.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Go online and share your current location before updating a trip." });
+      }
     }
     const updates = [trip];
     if (req.body?.action === "advance") {
@@ -249,6 +297,13 @@ async function start() {
     id TEXT PRIMARY KEY,
     data JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS driver_locations (
+    driver TEXT PRIMARY KEY,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    accuracy DOUBLE PRECISION NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   app.listen(port, () => console.log(`M&M Patriots NEMT listening on ${port}`));
