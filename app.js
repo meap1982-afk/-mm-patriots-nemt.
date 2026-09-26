@@ -1,6 +1,6 @@
 "use strict";
 
-const steps = ["Assigned", "Accepted", "Arrived at Pickup", "Patient Picked Up", "Arrived at Destination", "Completed"];
+const steps = ["Assigned", "Arrived", "Pick Up", "Completed"];
 const $ = (id) => document.getElementById(id);
 let trips = [];
 let drivers = [];
