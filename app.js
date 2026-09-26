@@ -256,6 +256,10 @@ async function createTrip() {
   const payerRelationship = patientPays !== "Yes" ? "" : payerType === "Other" ? $("payerRelationship").value.trim() : "Self";
   if (payerType === "Other" && (!payerFirstName || !payerLastName || !payerRelationship))
     return alert("Enter the name and relationship of the other person making the payment.");
+  for (const leg of ($("isRT").value === "yes" ? ["a", "b"] : ["a"])) {
+    if ($(`${leg}TimeType`).value === "Scheduled" && !/^([01]\d|2[0-3]):[0-5]\d$/.test($(`${leg}Time`).value))
+      return alert("Choose a pick up time or select Patient will call.");
+  }
   const now = Date.now();
   const base = {
     patientFirstName: firstName, patientLastName: lastName, patient: `${firstName} ${lastName}`,
@@ -272,10 +276,10 @@ async function createTrip() {
     auth: $("auth").value, notes: $("notes").value, created: now
   };
   const group = `${$("isRT").value === "yes" ? "RT" : "OW"}-${now}`;
-  const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: $("isRT").value === "yes" ? "Pick Up" : "One Way", time: $("aTime").value, driver: $("aDriver").value,
+  const newTrips = [{ ...base, id: `A-${now}`, group, leg: "A", label: $("isRT").value === "yes" ? "Pick Up" : "One Way", time: $("aTimeType").value === "Will Call" ? "" : $("aTime").value, timeType: $("aTimeType").value, driver: $("aDriver").value,
     pickup: loc($("aPickType").value, addressText(pickup), pickup.room),
     dropoff: loc($("aDropType").value, addressText(dropoff), dropoff.room), status: 0, events: [] }];
-  if ($("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", time: $("bTime").value,
+  if ($("isRT").value === "yes") newTrips.push({ ...base, id: `B-${now + 1}`, group, leg: "B", label: "Return", time: $("bTimeType").value === "Will Call" ? "" : $("bTime").value,
     timeType: $("bTimeType").value, driver: $("bDriver").value,
     pickup: loc($("aDropType").value, addressText(dropoff), dropoff.room),
     dropoff: loc($("aPickType").value, addressText(pickup), pickup.room), status: 0, events: [] });
@@ -319,7 +323,7 @@ function tripCard(t, mode) {
   const next = Number(t.status) < 5 ? steps[Number(t.status) + 1] : "Completed";
   return `<div class="card trip ${t.leg === "B" ? "return" : ""}">
     <div class="topline"><h3>${tripLabel}</h3>${mode === "dispatch" ? `<span class="badge ${roundTrip ? "rt" : ""}">${roundTrip ? "R/T" : "One Way"}</span>` : ""}</div>
-    <div><b>${esc(t.time || "Will Call")} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
+    <div><b>${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
     <div class="step ${needsWheelchair || needsOxygen ? "current" : ""}">♿ Need Wheelchair: <b>${needsWheelchair ? "YES" : "NO"}</b><br>Need Oxygen: <b>${needsOxygen ? "YES" : "NO"}</b></div>
     <div class="step ${t.hasStairs === "Yes" ? "current" : ""}">Stairs: <b>${stairs}</b></div>
     <div class="step ${t.hasCompanion === "Yes" ? "current" : ""}">Companion: <b>${companion}</b></div>
@@ -362,6 +366,16 @@ function render() {
   $("kScheduled").textContent = trips.filter((trip) => Number(trip.status) < 1).length;
   $("kProgress").textContent = trips.filter((trip) => Number(trip.status) > 0 && Number(trip.status) < 5).length;
   $("kDone").textContent = trips.filter((trip) => Number(trip.status) === 5).length;
+}
+
+function updatePickupTime(leg) {
+  const willCall = $(`${leg}TimeType`).value === "Will Call";
+  $(`${leg}TimeWrap`).classList.toggle("hidden", willCall);
+  $(`${leg}Time`).disabled = willCall;
+}
+for (const leg of ["a", "b"]) {
+  $(`${leg}TimeType`).addEventListener("change", () => updatePickupTime(leg));
+  updatePickupTime(leg);
 }
 
 function updateTripService() {

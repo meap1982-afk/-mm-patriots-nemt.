@@ -76,7 +76,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    </div>
    <h3 id="outboundHeading">Pick Up</h3>
    <div class="row">
-    <div class="grow"><label>Pick Up Time *</label><input id="aTime" type="time" value="08:30"></div>
+    <div class="grow"><label for="aTimeType">Pick Up Time *</label><select id="aTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
+    <div class="grow" id="aTimeWrap"><label for="aTime">Scheduled Pick Up Time *</label><input id="aTime" type="time" value="08:30"></div>
     <div class="grow"><label>Pick Up Location Type</label><select id="aPickType"><option>Home</option><option>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
     <div class="grow"><label>Drop-off Location Type</label><select id="aDropType"><option>Home</option><option selected>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
     <div class="grow"><label>Driver</label><select id="aDriver"><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option><option>Unassigned</option></select></div>
@@ -102,8 +103,8 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    <div id="returnFields">
     <h3>Return</h3>
     <div class="row">
-     <div class="grow"><label>Return Pick Up Time</label><input id="bTime" type="time" value="12:30"></div>
-     <div class="grow"><label>Return Time Type</label><select id="bTimeType"><option>Scheduled</option><option>Will Call</option></select></div>
+     <div class="grow"><label for="bTimeType">Return Pick Up Time *</label><select id="bTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
+     <div class="grow" id="bTimeWrap"><label for="bTime">Scheduled Return Time *</label><input id="bTime" type="time" value="12:30"></div>
      <div class="grow"><label>Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
     </div>
    </div>

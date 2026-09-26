@@ -33,6 +33,15 @@ test('required location, Dispatch visibility, checkout and replacement shifts', 
     assert.equal(health.status, 200);
     assert.equal(health.data.version, 'driver-location-v1');
     const dispatch = (await request('/login', null, 'POST', { role: 'dispatch', code: 'dispatch-test' })).data.token;
+    const tripInput = { id: 'pickup-time-test', patient: 'Test Patient', pickup: { address: 'Test pickup' }, dropoff: { address: 'Test dropoff' }, timeType: 'Scheduled', time: '09:15' };
+    let saved = await request('/trips', dispatch, 'POST', { trips: [tripInput] });
+    assert.equal(saved.status, 201);
+    assert.equal(saved.data.trips[0].time, '09:15');
+    saved = await request('/trips', dispatch, 'POST', { trips: [{ ...tripInput, timeType: 'Will Call' }] });
+    assert.equal(saved.status, 201);
+    assert.equal(saved.data.trips[0].time, '');
+    assert.equal(saved.data.trips[0].timeType, 'Will Call');
+    assert.equal((await request('/trips', dispatch, 'POST', { trips: [{ ...tripInput, time: '' }] })).status, 400);
     const first = await login();
     assert.equal((await request('/driver-locations')).status, 401);
     assert.equal((await request('/driver-locations', first)).status, 403);

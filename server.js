@@ -57,6 +57,7 @@ function cleanString(value, max = 500) {
 }
 
 function normalizeTrip(input) {
+  const timeType = input.timeType === "Will Call" ? "Will Call" : input.timeType === "Scheduled" || input.time ? "Scheduled" : "Will Call";
   const status = Math.max(0, Math.min(5, Number(input.status || 0)));
   const patientFirstName = cleanString(input.patientFirstName, 75);
   const patientLastName = cleanString(input.patientLastName, 75);
@@ -93,7 +94,7 @@ paymentByPhone,
 collectedBy: cleanString(input.collectedBy, 100),
 collectedAt: cleanString(input.collectedAt, 100),
     auth: cleanString(input.auth, 150), notes: cleanString(input.notes, 1500), created: Number(input.created || Date.now()),
-    time: cleanString(input.time, 30), timeType: cleanString(input.timeType, 30), driver: cleanString(input.driver, 100),
+    time: timeType === "Will Call" ? "" : cleanString(input.time, 30), timeType, driver: cleanString(input.driver, 100),
     pickup: { type: cleanString(input.pickup?.type, 60), address: cleanString(input.pickup?.address, 300), room: cleanString(input.pickup?.room, 80) },
     dropoff: { type: cleanString(input.dropoff?.type, 60), address: cleanString(input.dropoff?.address, 300), room: cleanString(input.dropoff?.room, 80) },
     status, events: Array.isArray(input.events) ? input.events.slice(-20) : []
@@ -198,6 +199,7 @@ app.post("/api/trips", auth, dispatchOnly, async (req, res, next) => {
   if (!incoming.length || incoming.some((trip) => !trip.id || !trip.patient ||
       (Boolean(trip.patientFirstName) !== Boolean(trip.patientLastName)) ||
       !trip.pickup.address || !trip.dropoff.address ||
+      (trip.timeType === "Scheduled" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(trip.time)) ||
       (trip.hasStairs === "Yes" && trip.stairsCount < 1) ||
       (trip.patientPays === "Yes" && (!trip.payerType || !trip.payerFirstName || !trip.payerLastName ||
         (trip.payerType === "Other" && !trip.payerRelationship))))) {
