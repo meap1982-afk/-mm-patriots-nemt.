@@ -699,6 +699,7 @@ $("aDate").addEventListener("change", () => {
 function updateTripService() {
   const oneWay = $("isRT").value === "no";
   $("returnFields").classList.toggle("hidden", oneWay || Boolean(editingTripId));
+  $("returnDriverWrap").classList.toggle("hidden", oneWay || Boolean(editingTripId));
   $("outboundHeading").textContent = oneWay ? "One Way" : "Pick Up";
 }
 $("isRT").addEventListener("change", updateTripService);

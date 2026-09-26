@@ -26,6 +26,19 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
 .loginbox input,.loginbox select{margin:6px 0;color:var(--ink)}.sync{font-size:12px;padding:5px 9px;border-radius:999px;background:#fff3cd;color:#785b00}.sync.online{background:#e8f7ee;color:#0b7c3b}.sync.offline{background:#ffe8eb;color:#bd1728}
 .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px}.kpi{background:white;border-radius:12px;padding:12px;text-align:center;border:1px solid var(--line)}.kpi b{display:block;font-size:22px}
 @media(max-width:650px){.kpis{grid-template-columns:repeat(2,1fr)}.wrap{padding:10px}header{padding-top:max(12px,env(safe-area-inset-top))}}
+
+/* Use matching accents in the form and trip cards; labels also identify each leg. */
+.leg-panel{padding:12px;border:1px solid;border-left-width:5px;border-radius:12px;margin:12px 0}
+.pickup-panel{background:#eff6ff;border-color:#93c5fd;border-left-color:#1d4ed8}
+.pickup-panel label{color:#1e40af}
+.return-panel{background:#fff7ed;border-color:#fdba74;border-left-color:#c2410c}
+.return-panel label,.return-panel h3{color:#9a3412}
+.return-panel h3{margin:0 0 6px}.return-panel .small{color:#7c2d12}
+.trip{background:#eff6ff;border-left-color:#1d4ed8}
+.trip .topline h3{color:#1e40af}
+.trip.return{background:#fff7ed;border-left-color:#c2410c}
+.trip.return .topline h3{color:#9a3412}
+.trip .meta{color:#475569}
 </style>
 </head>
 <body>
@@ -60,7 +73,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
   </div>
   <div class="card" id="tripForm">
    <div class="topline"><h2 id="tripFormTitle" style="margin:0">Create Trip</h2><span class="badge rt">R/T / One Way</span></div>
-   <div class="row">
+   <div class="row leg-panel pickup-panel" id="pickupSchedule">
     <div class="grow"><label for="aDate">Pick Up Date *</label><input id="aDate" type="date" required></div>
     <div class="grow"><label for="aTimeType">Pick Up Time *</label><select id="aTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
     <div class="grow" id="aTimeWrap"><label for="aTime">Scheduled Pick Up Time *</label><input id="aTime" type="time" value="08:30"></div>
@@ -97,14 +110,13 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Suite / Apartment / Room #</label><input id="aPickRoom" placeholder="Optional"></div>
    </div>
    <h4 class="address-heading">Drop-off Address *</h4>
-   <div id="returnFields">
+   <div id="returnFields" class="leg-panel return-panel">
     <h3>Return</h3>
     <p class="small">The return will be saved separately in Pending Returns. Dispatch sends it to the driver when ready.</p>
     <div class="row">
      <div class="grow"><label for="bDate">Return Date *</label><input id="bDate" type="date" required></div>
      <div class="grow"><label for="bTimeType">Return Pick Up Time *</label><select id="bTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>
      <div class="grow" id="bTimeWrap"><label for="bTime">Scheduled Return Time *</label><input id="bTime" type="time" value="12:30"></div>
-     <div class="grow"><label>Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
     </div>
    </div>
    <div class="row">
@@ -129,6 +141,9 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    <div class="row" id="payerFields">
     <div class="grow"><label>Who Will Pay?</label><select id="payerType"><option value="Patient">Patient Pays</option><option value="Other">Another Person Pays</option><option value="NoPay" selected>No Pay</option></select></div>
     <div class="grow hidden" id="paymentByPhoneWrap"><label>Payment by Phone?</label><select id="paymentByPhone"><option>No</option><option>Yes</option></select></div>
+   </div>
+   <div class="row leg-panel return-panel" id="returnDriverWrap">
+     <div class="grow"><label for="bDriver">Return Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
    </div>
    <div class="row hidden" id="payerPhoneWrap"><div class="grow"><label for="payerPhone">Payer Phone (optional)</label><input id="payerPhone" type="tel" autocomplete="tel" maxlength="40" placeholder="Phone number of the person paying"></div></div>
    <div class="row hidden" id="payerNameFields">
