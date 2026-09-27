@@ -533,8 +533,13 @@ function tripCard(t, mode) {
   const next = Number(t.status) === 4 ? "Patient dropped off / Complete trip" : Number(t.status) < 5 ? steps[Number(t.status) + 1] : "Completed";
   return `<div class="card trip ${t.leg === "B" ? "return" : ""} ${pickedUp ? "picked-up" : ""}">
     <div class="topline"><h3>${tripLabel}</h3>${mode === "dispatch" ? `<span class="badge ${roundTrip ? "rt" : ""}">${roundTrip ? "R/T" : "One Way"}</span>` : ""}</div>
-    <div class="step"><b>📅 ${esc(tripDateLabel(t.tripDate))}</b> · ${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)}</div>
-    <div><b>${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
+    <div class="trip-patient-summary">
+      <div class="trip-summary-label">Patient</div>
+      <div class="trip-patient-name">${esc(t.patient)}</div>
+      <div class="trip-pickup-time"><span class="trip-summary-label">${t.leg === "B" ? "Return pickup" : "Pickup time"}</span><strong>${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)}</strong></div>
+      <div class="trip-service-date">📅 ${esc(tripDateLabel(t.tripDate))}</div>
+      <div class="trip-service-info">${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
+    </div>
     <div class="step ${needsWheelchair || needsOxygen ? "current" : ""}">♿ Need Wheelchair: <b>${needsWheelchair ? "YES" : "NO"}</b><br>Need Oxygen: <b>${needsOxygen ? "YES" : "NO"}</b></div>
     <div class="step ${t.hasStairs === "Yes" ? "current" : ""}">Stairs: <b>${stairs}</b></div>
     <div class="step ${t.hasCompanion === "Yes" ? "current" : ""}">Companion: <b>${companion}</b></div>
