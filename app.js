@@ -265,10 +265,10 @@ async function refreshDriverLocations() {
       if (item.latitude == null) return `<div class="step current"><b>${esc(item.driver)}</b> · Offline · check-in waiting for required location</div>`;
       const latitude = Number(item.latitude);
       const longitude = Number(item.longitude);
-      const url = `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`;
+      const url = `https://maps.apple.com/?ll=${encodeURIComponent(`${latitude},${longitude}`)}&q=Driver%20Location`;
       return `<div class="step ${item.current ? "done" : "current"}">📍 <b>${esc(item.driver)}</b> · ${item.current ? "Live" : "Offline · last known (stale)"} · GPS ${esc(displayDate(item.recorded_at))} · received ${esc(displayDate(item.updated_at))}
         · accuracy ~${Math.round(Number(item.accuracy))} m
-        · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View on map</a></div>`;
+        · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View in Apple Maps</a></div>`;
     }).join("") : '<div class="step">No drivers sharing a recent location.</div>';
   } catch (error) {
     if (session?.role !== "dispatch" || session.token !== requestToken) return;
@@ -382,8 +382,8 @@ function addressText(fields) {
 function addressLink(location) {
   const address = String(location?.address || "").trim();
   if (!address) return "";
-  const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
-  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(address)} in Maps">${esc(address)}</a>${location?.room ? `, ${esc(location.room)}` : ""}`;
+  const url = `https://maps.apple.com/?daddr=${encodeURIComponent(address)}&dirflg=d`;
+  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(address)} in Apple Maps">${esc(address)}</a>${location?.room ? `, ${esc(location.room)}` : ""}`;
 }
 
 async function createTrip() {
