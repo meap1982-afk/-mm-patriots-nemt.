@@ -69,7 +69,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
  </div>
 
  <div class="card"><button id="newNotificationButton" class="success" hidden aria-controls="driverNotifications" aria-expanded="false" onclick="toggleDriverNotifications()">New Notification</button><div id="notificationControls"><div class="topline"><h3>Notifications <span class="badge" id="notificationCount">0</span></h3><button class="ghost" id="enableSounds" onclick="enableNotificationSounds()">Enable notification sounds</button></div><p class="small" id="soundStatus">Enable sounds to hear different alerts for each trip event.</p></div><div id="driverNotifications" aria-live="polite"></div></div>
- <div class="card" id="createTripToolbar" hidden><button class="primary" id="openCreateTripButton" aria-controls="tripForm" aria-expanded="false" onclick="openCreateTrip()">+ Create Trip</button></div>
+ <div class="card" id="createTripToolbar" hidden><button class="success" id="openCreateTripButton" aria-controls="tripForm" aria-expanded="false" onclick="openCreateTrip()">+ Create Trip</button></div>
  <div class="card"><h3>Trip folders</h3><div id="tripFolderNav" class="actions"></div><p id="tripFolderSummary" class="small"></p><div id="olderActiveTrips" role="status"></div></div>
  <section id="dispatch">
   <div class="kpis"><div class="kpi"><b id="kTotal">0</b>Total Trips</div><div class="kpi"><b id="kPendingReturns">0</b>Pending Returns</div><div class="kpi"><b id="kScheduled">0</b>Scheduled</div><div class="kpi"><b id="kProgress">0</b>In Progress</div><div class="kpi"><b id="kDone">0</b>Completed</div></div>
