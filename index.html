@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#07143c"/>
 <link rel="manifest" href="manifest.json">
 <title>M&M Patriots NEMT</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
 :root{--navy:#07143c;--blue:#1267e8;--red:#e01d2f;--green:#11994d;--bg:#f4f7fb;--ink:#14213d;--muted:#6b7890;--line:#dce3ee}
 *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink)}
@@ -43,6 +44,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
 .payment-panel label{color:#166534}
 .billing-panel{background:#fefce8;border-color:#fde047;border-left-color:#a16207}
 .billing-panel label{color:#854d0e}
+#fleetMap{height:420px;min-height:280px;border-radius:12px;isolation:isolate} .leaflet-tooltip{font-size:12px}
 </style>
 </head>
 <body>
@@ -72,7 +74,11 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
   <div class="kpis"><div class="kpi"><b id="kTotal">0</b>Total Trips</div><div class="kpi"><b id="kPendingReturns">0</b>Pending Returns</div><div class="kpi"><b id="kScheduled">0</b>Scheduled</div><div class="kpi"><b id="kProgress">0</b>In Progress</div><div class="kpi"><b id="kDone">0</b>Completed</div></div>
   <div class="card">
     <h2>Driver Locations</h2>
-    <p class="small">Drivers appear online while their app sends a current location. Updates about every 10 seconds; positions older than 60 seconds are hidden.</p>
+    <p class="small">Location sharing is required while online. Native iPhone GPS continues in the background with Always + Precise permission. GPS sends about every 10 seconds when available; positions older than 60 seconds are marked offline.</p>
+    <button class="ghost" onclick="DriverFleetMap.fit()">Show all drivers</button>
+    <p id="fleetMapStatus" class="small" role="status">Waiting for locations…</p>
+    <div id="fleetMap" aria-label="Live driver location map"></div>
+    <p id="fleetTileStatus" class="small" role="status"></p>
     <div id="driverLocations">Loading locations…</div>
   </div>
   <div class="card" id="tripForm">
@@ -251,5 +257,7 @@ function render(){
 }
 render();
 </script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="fleet-map.js"></script>
 <script src="app.js"></script>
 </body></html>

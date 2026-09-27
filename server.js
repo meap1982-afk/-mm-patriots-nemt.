@@ -120,7 +120,7 @@ function invalidTripDetails(trip) {
 }
 
 app.set("trust proxy", 1);
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({ contentSecurityPolicy: false, referrerPolicy: { policy: "strict-origin-when-cross-origin" } }));
 app.use(express.json({ limit: "200kb" }));
 app.use("/api/login", rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }));
 
@@ -466,10 +466,10 @@ app.patch("/api/trips/:id", auth, async (req, res, next) => {
   }
 });
 
-const publicFiles = new Set(["/", "/index.html", "/app.js", "/logo.jpeg", "/manifest.json", "/service-worker.js", "/support.html"]);
+const publicFiles = new Set(["/", "/index.html", "/app.js", "/logo.jpeg", "/manifest.json", "/service-worker.js", "/support.html", "/fleet-map.js", "/vendor/leaflet/leaflet.js", "/vendor/leaflet/leaflet.css", "/vendor/leaflet/LICENSE"]);
 app.use((req, res, next) => {
   if (!publicFiles.has(req.path)) return next();
-  if (["/", "/index.html", "/app.js", "/service-worker.js"].includes(req.path)) res.set("Cache-Control", "no-cache");
+  if (["/", "/index.html", "/app.js", "/fleet-map.js", "/service-worker.js"].includes(req.path)) res.set("Cache-Control", "no-cache");
   res.sendFile(path.join(__dirname, req.path === "/" ? "index.html" : req.path.slice(1)));
 });
 app.get(/.*/, (_req, res) => res.sendFile(path.join(__dirname, "index.html")));

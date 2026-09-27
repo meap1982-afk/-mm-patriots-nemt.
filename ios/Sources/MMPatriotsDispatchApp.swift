@@ -49,7 +49,13 @@ struct ContentView: View {
                     HStack {
                         Text(location.status).font(.caption)
                         Spacer()
-
+                        if location.requiresSettings {
+                            Button("Location Settings") {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            }.font(.caption)
+                        }
                     }.padding(10)
                 }
                 WebContainer(baseURL: url, location: location)
@@ -194,6 +200,7 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
     var baseURL: URL?
     @Published private(set) var active = false
     @Published private(set) var status = "Checked out"
+    @Published private(set) var requiresSettings = false
     private let manager = CLLocationManager()
     private let notifications = DriverNotifications()
     private var token: String?
@@ -271,6 +278,8 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
             upload = nil
             lastAcknowledged = .distantPast
         }
+        requiresSettings = manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted ||
+            manager.authorizationStatus == .authorizedWhenInUse || manager.accuracyAuthorization != .fullAccuracy
         switch manager.authorizationStatus {
         case .notDetermined:
             report(false, "Location required · allow While Using, then Always")
@@ -305,6 +314,7 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
             if !pending.contains(item) { pending.append(item); persistPending() }
         }
         active = false
+        requiresSettings = false
         generation = UUID()
         upload?.cancel()
         upload = nil
@@ -329,7 +339,10 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        if active { report(false, "Location unavailable · waiting for GPS or permission") }
+        if active {
+            lastAcknowledged = .distantPast
+            report(false, "Location unavailable · waiting for GPS or permission")
+        }
     }
 
     private func maintain() {
@@ -415,7 +428,7 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
     private func report(_ online: Bool, _ message: String) {
         status = message
         guard let webView,
-              let json = try? JSONSerialization.data(withJSONObject: [online, message]),
+              let json = try? JSONSerialization.data(withJSONObject: [online, message, ISO8601DateFormatter().string(from: lastAcknowledged)]),
               let argument = String(data: json, encoding: .utf8) else { return }
         webView.evaluateJavaScript("window.nativeLocationState?.apply(null, \(argument))")
     }

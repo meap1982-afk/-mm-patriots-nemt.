@@ -11,6 +11,8 @@
 		92DA45FC128D10D51A3E83C5 /* MMPatriotsDispatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04072765609CEEBE1C4FF81 /* MMPatriotsDispatchApp.swift */; };
 		C22D82DEDF833D51410612C7 /* assigned.wav in Resources */ = {isa = PBXBuildFile; fileRef = 80EDF90D15C0C87FD6AABE4C /* assigned.wav */; };
 		DAF964AD587FEF14A2BDEF31 /* cancelled.wav in Resources */ = {isa = PBXBuildFile; fileRef = C3992C358CBDF8C1817726EB /* cancelled.wav */; };
+		AA00000000000000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000011; };
+		AA00000000000000000000022 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000021; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +22,8 @@
 		AF72EFAEE7CB3D6A98BA72E0 /* DriverNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverNotifications.swift; sourceTree = "<group>"; };
 		C3992C358CBDF8C1817726EB /* cancelled.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = cancelled.wav; sourceTree = "<group>"; };
 		D04072765609CEEBE1C4FF81 /* MMPatriotsDispatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMPatriotsDispatchApp.swift; sourceTree = "<group>"; };
+		AA00000000000000000000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA00000000000000000000021 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -51,6 +55,8 @@
 		FD9386B66BDF490F8D5AFEDF /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				AA00000000000000000000011 /* Assets.xcassets */,
+				AA00000000000000000000021 /* PrivacyInfo.xcprivacy */,
 				AF72EFAEE7CB3D6A98BA72E0 /* DriverNotifications.swift */,
 				453E9ED5CE3E58D7F78DD5F4 /* Info.plist */,
 				D04072765609CEEBE1C4FF81 /* MMPatriotsDispatchApp.swift */,
@@ -118,6 +124,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA00000000000000000000022 /* PrivacyInfo.xcprivacy in Resources */,
+				AA00000000000000000000012 /* Assets.xcassets in Resources */,
 				C22D82DEDF833D51410612C7 /* assigned.wav in Resources */,
 				DAF964AD587FEF14A2BDEF31 /* cancelled.wav in Resources */,
 			);
@@ -263,18 +271,20 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = YX85WZ98J8;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmpatriots.dispatch;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmpatriots.nemt;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -284,18 +294,20 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = YX85WZ98J8;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmpatriots.dispatch;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmpatriots.nemt;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};

@@ -89,6 +89,7 @@ function openApp() {
 function logout() {
   if (editingTripId) cancelTripEdit();
   stopLocationSharing();
+  window.DriverFleetMap?.clear();
   clearInterval(polling);
   localStorage.removeItem("mmSession");
   stopNotificationSounds();
@@ -250,19 +251,24 @@ async function cancelTrip(id) {
 
 async function refreshDriverLocations() {
   if (session?.role !== "dispatch") return;
+  const requestToken = session.token;
   try {
     const data = await api("/driver-locations");
+    if (session?.role !== "dispatch" || session.token !== requestToken) return;
     const locations = data.locations || [];
+    window.DriverFleetMap?.update(locations);
     $("driverLocations").innerHTML = locations.length ? locations.map((item) => {
-      if (item.latitude == null) return `<div class="step current"><b>${esc(item.driver)}</b> · Checked in · waiting for required location</div>`;
+      if (item.latitude == null) return `<div class="step current"><b>${esc(item.driver)}</b> · Offline · check-in waiting for required location</div>`;
       const latitude = Number(item.latitude);
       const longitude = Number(item.longitude);
       const url = `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`;
-      return `<div class="step ${item.current ? "done" : "current"}">📍 <b>${esc(item.driver)}</b> · ${item.current ? "Live" : "Last known (stale)"} · GPS ${esc(displayDate(item.recorded_at))} · received ${esc(displayDate(item.updated_at))}
+      return `<div class="step ${item.current ? "done" : "current"}">📍 <b>${esc(item.driver)}</b> · ${item.current ? "Live" : "Offline · last known (stale)"} · GPS ${esc(displayDate(item.recorded_at))} · received ${esc(displayDate(item.updated_at))}
         · accuracy ~${Math.round(Number(item.accuracy))} m
         · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View on map</a></div>`;
     }).join("") : '<div class="step">No drivers sharing a recent location.</div>';
   } catch (error) {
+    if (session?.role !== "dispatch" || session.token !== requestToken) return;
+    window.DriverFleetMap?.unavailable();
     $("driverLocations").textContent = "Driver locations unavailable.";
     console.error(error);
   }
@@ -291,7 +297,7 @@ async function sendLocation() {
     if (!sharingLocation || session?.token !== locationToken) return;
     lastLocationUpdate = position.timestamp;
     locationOnline = true;
-    locationMessage(`Online · location updated ${new Date().toLocaleTimeString()}`);
+    locationMessage(`Online in browser · keep this screen open · location updated ${new Date().toLocaleTimeString()}`);
     render();
   } catch (error) {
     if (session?.token !== locationToken || !sharingLocation) return;
@@ -332,10 +338,13 @@ function stopLocationSharing() {
   }
 }
 
-window.nativeLocationState = (online, message) => {
+window.nativeLocationState = (online, message, recordedAt) => {
   if (session?.role !== "driver" || !sharingLocation) return;
   locationOnline = online === true;
-  if (locationOnline) lastLocationUpdate = Date.now();
+  if (locationOnline) {
+    lastLocationUpdate = recordedAt ? Date.parse(recordedAt) : Date.now();
+    locationOnline = Number.isFinite(lastLocationUpdate) && Date.now() - lastLocationUpdate < 60000;
+  }
   locationMessage(message || (locationOnline ? "Online · background location active" : "Offline · location unavailable"));
   render();
 };

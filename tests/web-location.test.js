@@ -43,3 +43,14 @@ test('browser uploads GPS acquisition time and checkout requests deletion', asyn
   vm.runInContext('stopLocationSharing()', state.context);
   assert.equal(state.requests.at(-1).options.method, 'DELETE');
 });
+
+test('native refresh uses acquisition time and cannot make an old fix online', () => {
+  const state = setup();
+  vm.runInContext('startLocationSharing()', state.context);
+  state.context.oldFix = new Date(Date.now() - 65000).toISOString();
+  vm.runInContext('window.nativeLocationState(true, "online", oldFix)', state.context);
+  assert.equal(vm.runInContext('locationOnline', state.context), false);
+  state.context.freshFix = new Date().toISOString();
+  vm.runInContext('window.nativeLocationState(true, "online", freshFix)', state.context);
+  assert.equal(vm.runInContext('locationOnline', state.context), true);
+});
