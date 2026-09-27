@@ -265,7 +265,7 @@ async function refreshDriverLocations() {
       if (item.latitude == null) return `<div class="step current"><b>${esc(item.driver)}</b> · Offline · check-in waiting for required location</div>`;
       const latitude = Number(item.latitude);
       const longitude = Number(item.longitude);
-      const url = `https://maps.apple.com/?ll=${encodeURIComponent(`${latitude},${longitude}`)}&q=Driver%20Location`;
+      const url = `https://maps.apple.com/?ll=${encodeURIComponent(`${latitude},${longitude}`)}&q=${encodeURIComponent(item.driver)}`;
       return `<div class="step ${item.current ? "done" : "current"}">📍 <b>${esc(item.driver)}</b> · ${item.current ? "Live" : "Offline · last known (stale)"} · GPS ${esc(displayDate(item.recorded_at))} · received ${esc(displayDate(item.updated_at))}
         · accuracy ~${Math.round(Number(item.accuracy))} m
         · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View in Apple Maps</a></div>`;
