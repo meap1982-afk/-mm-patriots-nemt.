@@ -108,10 +108,12 @@ function showDispatch() {
   if (session?.role !== "dispatch") return showDriver();
   $("dispatch").classList.remove("hidden"); $("driver").classList.add("hidden");
   $("dispatchTab").classList.add("active"); $("driverTab").classList.remove("active");
+  $("createTripToolbar").hidden = false;
   $("roleTitle").textContent = "Dispatch"; render();
 }
 
 function showDriver() {
+  $("createTripToolbar").hidden = true;
   $("driver").classList.remove("hidden"); $("dispatch").classList.add("hidden");
   $("driverTab").classList.add("active"); $("dispatchTab").classList.remove("active");
   $("roleTitle").textContent = session?.driver ? `Driver — ${session.driver}` : "Driver"; render();
