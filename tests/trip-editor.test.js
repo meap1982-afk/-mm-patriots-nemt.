@@ -18,7 +18,7 @@ test('Dispatch edits only the selected return, cancels to the original form, and
     });
   }
   fields.get('tripForm').querySelectorAll = () => [...fields.values()].filter(f => ['INPUT', 'SELECT', 'TEXTAREA'].includes(f.tagName) && !['accessCode', 'loginDriver'].includes(f.id));
-  let confirmDelete = false;
+  let confirmDelete = false, failCreate = false;
   const context = vm.createContext({
     document: { getElementById: id => fields.get(id), addEventListener() {} },
     localStorage: { getItem: () => 'null' }, window: {}, console,
@@ -26,6 +26,7 @@ test('Dispatch edits only the selected return, cancels to the original form, and
     confirm: () => confirmDelete, alert: value => alerts.push(value),
     fetch: async (url, options = {}) => {
       calls.push({ url, ...options });
+      if (failCreate && options.method === "POST") throw new Error("Save unavailable");
       return { ok: true, status: 200, json: async () => url.endsWith('/config') ? { drivers: ['Test Driver'] } : { trips: [] } };
     }
   });
@@ -84,6 +85,30 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   await vm.runInContext("deleteTrip('return-b')", context);
   assert.equal(calls.find(c => c.method === 'DELETE').url, '/api/trips/return-b');
   assert.equal(alerts.length, 1);
+  vm.runInContext('openCreateTrip()', context);
+  const values = {patientFirstName:'New', patientLastName:'Patient', phone:'5555550100',
+    isRT:'yes', aDriver:'Test Driver', bDriver:'Test Driver', helperDriver:'Test Driver',
+    payerType:'NoPay', aDate:'2026-09-28', bDate:'2026-09-28', aTimeType:'Will Call', bTimeType:'Will Call'};
+  for (const prefix of ['aPick','aDrop']) Object.assign(values, {
+    [prefix+'Number']:'123', [prefix+'Street']:'Example Road', [prefix+'City']:'Town',
+    [prefix+'State']:'VA', [prefix+'Zip']:'20164', [prefix+'Room']:'4'
+  });
+  for (const [id,value] of Object.entries(values)) fields.get(id).value=value;
+  failCreate = true;
+  await vm.runInContext('createTrip()', context);
+  assert.equal(fields.get('patientFirstName').value, 'New');
+  assert.equal(fields.get('aDriver').value, 'Test Driver');
+  assert.equal(fields.get('bDriver').value, 'Test Driver');
+  failCreate = false;
+  await vm.runInContext('createTrip()', context);
+  const saved = JSON.parse(calls.filter(c => c.method === 'POST').at(-1).body).trips;
+  assert.equal(saved.length, 2);
+  assert.ok(saved.every(t => t.driver === 'Test Driver' && t.patient === 'New Patient'));
+  vm.runInContext('openCreateTrip()', context);
+  for (const id of ['patientFirstName','patientLastName','phone','payerPhone','aPickNumber','aDropNumber','notes','dispatchNotes'])
+    assert.equal(fields.get(id).value, '', id);
+  for (const id of ['aDriver','bDriver','helperDriver']) assert.equal(fields.get(id).value, 'Unassigned', id);
+
 });
 
  test('driver can see and dial the payer separately from the patient', () => {

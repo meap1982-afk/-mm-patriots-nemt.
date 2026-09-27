@@ -452,10 +452,11 @@ async function createTrip() {
       alert("Trip updated. Only this leg was changed.");
     } else {
       await api("/trips", { method: "POST", body: JSON.stringify({ trips: newTrips }) });
+      resetCreateTripForm();
       createTripOpen = false;
       updateTripFormVisibility();
       await refreshTrips();
-      alert($("isRT").value === "yes" ? "Pick Up shared with the driver. Return saved separately in Pending Returns." : "Trip saved and shared with the assigned driver.");
+      alert(newTrips.length > 1 ? "Pick Up shared with the driver. Return saved separately in Pending Returns." : "Trip saved and shared with the assigned driver.");
     }
   } catch (error) { setSync("offline", "Save failed"); alert(error.message); }
   finally { savingTrip = false; $("saveTripButton").disabled = false; }
@@ -615,6 +616,24 @@ function editTrip(id) {
   }
   $("tripForm").scrollIntoView({ behavior: "smooth", block: "start" });
   $("patientFirstName").focus({ preventScroll: true });
+}
+
+function resetCreateTripForm() {
+  for (const field of $("tripForm").querySelectorAll("input, select, textarea")) {
+    field.disabled = false;
+    if (field.tagName === "SELECT") {
+      field.value = [...field.options].find(option => option.defaultSelected)?.value || field.options[0]?.value || "";
+    } else {
+      field.value = field.defaultValue || "";
+    }
+  }
+  for (const id of ["aDriver", "bDriver", "helperDriver"]) $(id).value = "Unassigned";
+  $("payerType").value = "NoPay";
+  $("patientAmount").value = "0.00";
+  $("aDate").value = $("bDate").value = todayTripDate();
+  previousPickupDate = $("aDate").value;
+  tripFormSnapshot = null;
+  syncTripForm();
 }
 
 function openCreateTrip() {
