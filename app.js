@@ -513,6 +513,7 @@ function tripAdvanceBlock(trip) {
 
 function tripCard(t, mode) {
   const pendingReturn = isPendingReturn(t);
+  const pickedUp = t.leg !== "B" && !t.cancelled && Number(t.status) >= 3;
   const advanceBlock = mode === "driver" ? tripAdvanceBlock(t) : "";
   const destinationLocked = mode === "driver" && (t.destinationLocked === true || !(Number(t.status) >= 2));
   const status = t.cancelled ? "Cancelled" : pendingReturn ? "Pending Return" : steps[Number(t.status || 0)] || steps[0];
@@ -529,7 +530,7 @@ function tripCard(t, mode) {
   const options = [...drivers, "Unassigned"].map((name) => `<option ${name === t.driver ? "selected" : ""}>${esc(name)}</option>`).join("");
   const helperOptions = [...drivers, "Unassigned"].map((name) => `<option ${name === t.helperDriver ? "selected" : ""}>${esc(name)}</option>`).join("");
   const next = Number(t.status) === 4 ? "Patient dropped off / Complete trip" : Number(t.status) < 5 ? steps[Number(t.status) + 1] : "Completed";
-  return `<div class="card trip ${t.leg === "B" ? "return" : ""}">
+  return `<div class="card trip ${t.leg === "B" ? "return" : ""} ${pickedUp ? "picked-up" : ""}">
     <div class="topline"><h3>${tripLabel}</h3>${mode === "dispatch" ? `<span class="badge ${roundTrip ? "rt" : ""}">${roundTrip ? "R/T" : "One Way"}</span>` : ""}</div>
     <div class="step"><b>📅 ${esc(tripDateLabel(t.tripDate))}</b> · ${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)}</div>
     <div><b>${esc(t.timeType === "Will Call" || !t.time ? "Patient will call" : t.time)} · ${esc(t.patient)}</b> · ${esc(t.type)} ${t.twoMen === "Yes" ? "· Two-Men Team" : ""}${t.needsHelper === "Yes" ? " · Helper Required" : ""}</div>
