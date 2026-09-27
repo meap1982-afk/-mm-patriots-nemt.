@@ -81,8 +81,9 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <p id="fleetTileStatus" class="small" role="status"></p>
     <div id="driverLocations">Loading locations…</div>
   </div>
-  <div class="card" id="tripForm">
-   <div class="topline"><h2 id="tripFormTitle" style="margin:0">Create Trip</h2><span class="badge rt">R/T / One Way</span></div>
+  <div class="card"><button class="primary" id="openCreateTripButton" aria-controls="tripForm" aria-expanded="false" onclick="openCreateTrip()">+ Create Trip</button></div>
+  <div class="card" id="tripForm" hidden>
+   <div class="topline"><h2 id="tripFormTitle" style="margin:0">Create Trip</h2><span class="badge rt">R/T / One Way</span><button class="ghost" onclick="closeTripForm()">Close</button></div>
    <div class="row leg-panel pickup-panel" id="pickupSchedule">
     <div class="grow"><label for="aDate">Pick Up Date *</label><input id="aDate" type="date" required></div>
     <div class="grow"><label for="aTimeType">Pick Up Time *</label><select id="aTimeType"><option value="Scheduled">Choose a time</option><option value="Will Call">Patient will call</option></select></div>

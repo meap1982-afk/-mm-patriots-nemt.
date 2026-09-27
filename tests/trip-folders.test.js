@@ -81,7 +81,7 @@ test('Pending collects returns across all dates and removes released or cancelle
   vm.runInContext('selectTripFolder("past")',context);
   assert.match(elements.get('dispatchTrips').innerHTML,/ReturnPatient0/);
   assert.equal(elements.get('dispatchTrips').hidden,false);
-  assert.equal(elements.get('tripForm').hidden,false);
+  assert.equal(elements.get('tripForm').hidden,true);
   vm.runInContext('session={role:"driver"};selectTripFolder("pending")',context);
   assert.equal(vm.runInContext('tripFolder',context),'past');
 });

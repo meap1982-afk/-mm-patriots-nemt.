@@ -11,6 +11,7 @@ let notificationRequest = null;
 let driverInboxOpen = false;
 let unreadNotificationCount = 0;
 let editingTripId = null;
+let createTripOpen = false;
 let tripFormSnapshot = null;
 let savingTrip = false;
 let locationTimer;
@@ -64,6 +65,7 @@ function openApp() {
   unreadNotificationCount = 0;
   updateNotificationView();
   tripFolder = "today";
+  createTripOpen = false;
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
   $("dispatchTab").classList.toggle("hidden", session.role !== "dispatch");
@@ -447,6 +449,8 @@ async function createTrip() {
       alert("Trip updated. Only this leg was changed.");
     } else {
       await api("/trips", { method: "POST", body: JSON.stringify({ trips: newTrips }) });
+      createTripOpen = false;
+      updateTripFormVisibility();
       await refreshTrips();
       alert($("isRT").value === "yes" ? "Pick Up shared with the driver. Return saved separately in Pending Returns." : "Trip saved and shared with the assigned driver.");
     }
@@ -607,8 +611,28 @@ function editTrip(id) {
   $("patientFirstName").focus({ preventScroll: true });
 }
 
+function openCreateTrip() {
+  if (session?.role !== "dispatch" || savingTrip) return;
+  if (editingTripId) {
+    if (!confirm("Discard the current edit and open Create Trip?")) return;
+    cancelTripEdit();
+  }
+  createTripOpen = true;
+  updateTripFormVisibility();
+  $("tripForm").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeTripForm() {
+  if (savingTrip) return;
+  if (editingTripId) { cancelTripEdit(); return; }
+  createTripOpen = false;
+  updateTripFormVisibility();
+  $("openCreateTripButton").focus();
+}
+
 function updateTripFormVisibility() {
-  $("tripForm").hidden = tripFolder === "pending" && !editingTripId;
+  $("tripForm").hidden = !editingTripId && !createTripOpen;
+  $("openCreateTripButton").ariaExpanded = String(createTripOpen && !editingTripId);
 }
 
 function syncTripForm() {
@@ -620,6 +644,7 @@ function syncTripForm() {
 
 function cancelTripEdit() {
   editingTripId = null;
+  createTripOpen = false;
   if (tripFormSnapshot) for (const field of tripFormSnapshot) {
     $(field.id).value = field.value; $(field.id).disabled = field.disabled;
   }

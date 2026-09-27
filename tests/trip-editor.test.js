@@ -31,7 +31,14 @@ test('Dispatch edits only the selected return, cancels to the original form, and
   });
   vm.runInContext(fs.readFileSync(require.resolve('../app.js'), 'utf8'), context);
   await new Promise(resolve => setImmediate(resolve));
+  vm.runInContext("session = {role: 'dispatch'}; updateTripFormVisibility()", context);
+  assert.equal(fields.get('tripForm').hidden, true);
+  vm.runInContext('openCreateTrip(); render()', context);
+  assert.equal(fields.get('tripForm').hidden, false);
   fields.get('patientFirstName').value = 'Unsaved draft';
+  vm.runInContext('closeTripForm(); render()', context);
+  assert.equal(fields.get('tripForm').hidden, true);
+  assert.equal(fields.get('patientFirstName').value, 'Unsaved draft');
   const original = { id: 'return-b', tripDate: '2026-09-28', group: 'RT-test', leg: 'B', returnPending: true, status: 0,
     patientFirstName: 'Test', patientLastName: 'Patient', patient: 'Test Patient', phone: '5555550100',
     driver: 'Test Driver', type: 'Bariatric Wheelchair', payerType: 'Other', patientPays: 'Yes', payerFirstName: 'Pay', payerLastName: 'Person', payerRelationship: 'Friend', payerPhone: '+1 (555) 555-0123', timeType: 'Will Call',
