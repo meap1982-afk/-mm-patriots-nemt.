@@ -106,6 +106,7 @@ function logout() {
 }
 
 function showDispatch() {
+  closePatientList();
   if (session?.role !== "dispatch") return showDriver();
   $("dispatch").classList.remove("hidden"); $("driver").classList.add("hidden");
   $("dispatchTab").classList.add("active"); $("driverTab").classList.remove("active");
@@ -114,6 +115,7 @@ function showDispatch() {
 }
 
 function showDriver() {
+  closePatientList();
   $("createTripToolbar").hidden = true;
   $("driver").classList.remove("hidden"); $("dispatch").classList.add("hidden");
   $("driverTab").classList.add("active"); $("dispatchTab").classList.remove("active");
@@ -642,6 +644,7 @@ function resetCreateTripForm() {
 }
 
 function openCreateTrip() {
+  closePatientList();
   if (session?.role !== "dispatch" || savingTrip) return;
   if (editingTripId) {
     if (!confirm("Discard the current edit and open Create Trip?")) return;
@@ -733,9 +736,17 @@ function folderForTrip(trip, day = todayTripDate()) {
 function selectTripFolder(folder) {
   if (session?.role === "driver") return;
   if (!["today", "pending", "upcoming", "past", "undated"].includes(folder)) return;
+  closePatientList();
   tripFolder = folder;
   render();
 }
+function closePatientList() {
+  const panel = $("patientListPanel");
+  if (panel) panel.hidden = true;
+  const button = $("patientListButton");
+  if (button?.setAttribute) button.setAttribute("aria-expanded", "false");
+}
+
 function togglePatientList() {
   if (session?.role !== "dispatch") return;
   const panel = $("patientListPanel");
