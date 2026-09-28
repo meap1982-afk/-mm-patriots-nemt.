@@ -44,6 +44,9 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
 .payment-panel label{color:#166534}
 .billing-panel{background:#fefce8;border-color:#fde047;border-left-color:#a16207}
 .billing-panel label{color:#854d0e}
+.patient-amount-input{position:relative}
+.patient-amount-input span{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#166534;font-weight:700;pointer-events:none}
+#patientAmount{padding-left:32px;background:#dcfce7;border:2px solid #15803d;color:#14532d;font-weight:700}
 #fleetMap{height:420px;min-height:280px;border-radius:12px;isolation:isolate} .leaflet-tooltip{font-size:12px}
 .step.unassigned-return{background:#fef08a;color:#713f12;border:1px solid #eab308} details>summary{cursor:pointer;font-weight:700;padding:10px 0}
 .trip.picked-up{background:#dcfce7;border-left-color:#15803d}.trip.picked-up .topline h3{color:#166534}
@@ -138,7 +141,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    </div>
    </div>
    <div class="row leg-panel payment-panel">
-    <div class="grow"><label for="aDriver">Pick Up Driver</label><select id="aDriver"><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option><option>Unassigned</option></select></div>
+    <div class="grow"><label for="aDriver">Pick Up Driver</label><select id="aDriver"><option selected>Unassigned</option><option>Carlos R.</option><option>Jose L.</option><option>Ana M.</option></select></div>
    </div>
    <div class="row leg-panel return-panel">
     <div class="grow"><label for="aDropType">Drop-off Location Type</label><select id="aDropType"><option>Home</option><option selected>Hospital</option><option>Rehab</option><option>Nursing Home</option><option>Assisted Living</option><option>Doctor Office</option><option>Dialysis Center</option><option>Other</option></select></div>
@@ -168,7 +171,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
     <div class="grow"><label>Payment Method</label><select id="payment"><option>Insurance / Broker</option><option>Private Pay</option><option>Credit / Debit Card</option><option>Cash</option><option>Check</option><option>Facility / Hospital</option><option>Invoice / Billing</option><option>Other</option></select></div>
     <div class="grow"><label>Payment Status</label><select id="payStatus"><option>Pending</option><option>Paid</option><option>Invoice</option></select></div>
     <input id="patientPays" type="hidden" value="No">
-    <div class="grow hidden" id="patientAmountWrap"><label>Patient Amount Due</label><input id="patientAmount" type="number" min="0" step="0.01" value="0.00" placeholder="$0.00"></div>
+    <div class="grow hidden" id="patientAmountWrap"><label for="patientAmount">Patient Amount Due (USD)</label><div class="patient-amount-input"><span aria-hidden="true">$</span><input id="patientAmount" type="number" min="0" step="0.01" value="0.00" placeholder="0.00"></div></div>
    <div class="grow"><label>Authorization / Confirmation #</label><input id="auth" placeholder="Optional"></div>
    </div>
    <div class="row leg-panel billing-panel" id="payerFields">
@@ -177,7 +180,7 @@ button{border:0;border-radius:11px;padding:12px 14px;font-weight:800;font-size:1
    </div>
    <div class="row leg-panel billing-panel hidden" id="payerPhoneWrap"><div class="grow"><label for="payerPhone">Payer Phone (optional)</label><input id="payerPhone" type="tel" autocomplete="tel" maxlength="40" placeholder="Phone number of the person paying"></div></div>
    <div class="row leg-panel payment-panel" id="returnDriverWrap">
-     <div class="grow"><label for="bDriver">Return Driver</label><select id="bDriver"><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option><option>Unassigned</option></select></div>
+     <div class="grow"><label for="bDriver">Return Driver</label><select id="bDriver"><option selected>Unassigned</option><option>Jose L.</option><option>Carlos R.</option><option>Ana M.</option></select></div>
    </div>
    <div class="row leg-panel billing-panel hidden" id="payerNameFields">
     <div class="grow"><label>Payer First Name *</label><input id="payerFirstName" autocomplete="off" maxlength="75" placeholder="First name"></div>
