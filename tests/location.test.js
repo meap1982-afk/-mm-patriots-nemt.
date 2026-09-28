@@ -256,7 +256,7 @@ test('Dispatch trip CRUD, pending R/T returns, pickup times and driver location'
     for (let step = 0; step < 4; step++) assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'advance' })).status, 200);
     assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'advance' })).status, 409);
     assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'collectPayment', paymentMethod:'Credit Card' })).status, 200);
-    for (const leg of ['workflow-A', 'workflow-B']) assert.equal((await request('/trips/' + leg, first, 'PATCH', {action:'collectPayment', paymentMethod:'Cash'})).status, 409);
+    for (const leg of ['workflow-A', 'workflow-B']) assert.equal((await request('/trips/' + leg, dispatch, 'PATCH', {action:'collectPayment', paymentMethod:'Cash'})).status, 409);
     assert.equal((await request('/trips/workflow-B', first, 'PATCH', { action:'advance' })).status, 200);
     await query("UPDATE driver_locations SET recorded_at=NOW() - INTERVAL '2 minutes'");
     assert.equal((await request('/driver-locations', dispatch)).data.locations[0].current, false);
