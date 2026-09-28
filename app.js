@@ -864,7 +864,7 @@ loadConfig().then(() => {
     const select = $(id);
     const current = select.value;
     select.innerHTML = [...drivers, "Unassigned"].map((name) => `<option>${esc(name)}</option>`).join("");
-    if ([...drivers, "Unassigned"].includes(current)) select.value = current;
+    select.value = [...drivers, "Unassigned"].includes(current) ? current : "Unassigned";
   }
   if (session?.token) openApp();
 });
