@@ -765,7 +765,8 @@ function patientListRows(selectedTrips) {
     const complete = !cancelled && legs.every(leg => Number(leg.status) === 5) &&
       (!rt || (legs.some(leg => leg.leg === "A") && legs.some(leg => leg.leg === "B")));
     const status = cancelled ? "Cancelled / review trip" : complete ? "Completed" : "Pending / incomplete";
-    return `<div class="patient-list-row"><div><div class="patient-list-time">${esc(time(pickup) === "99:99" ? "Will call" : pickup.time)}</div><div class="small">${esc(tripDateLabel(pickup.tripDate))}</div></div><div><div class="patient-list-name">${esc(pickup.patient)}</div><div class="trip-service-info">Type: ${esc(pickup.type || "Not specified")}</div></div><div class="patient-list-status"><span aria-hidden="true" class="patient-dot ${cancelled ? "cancelled" : complete ? "complete" : ""}"></span>${rt ? "R/T" : "One Way"} · ${status}</div></div>`;
+    const support = [pickup.twoMen === "Yes" ? "Two-Men Team" : "", pickup.needsHelper === "Yes" ? "Helper required" : "", /bariatric/i.test(pickup.type || "") ? "Bariatric" : ""].filter(Boolean);
+    return `<div class="patient-list-row"><div><div class="patient-list-time">${esc(time(pickup) === "99:99" ? "Will call" : pickup.time)}</div><div class="small">${esc(tripDateLabel(pickup.tripDate))}</div></div><div><div class="patient-list-name">${esc(pickup.patient)}</div><div class="trip-service-info">Type: ${esc(pickup.type || "Not specified")}</div>${support.length ? `<div class="patient-list-status"><span aria-hidden="true" class="patient-dot" style="background:#16a34a;border-color:#166534"></span>${esc(support.join(" · "))}</div>` : ""}</div><div class="patient-list-status"><span aria-hidden="true" class="patient-dot ${cancelled ? "cancelled" : complete ? "complete" : ""}"></span>${rt ? "R/T" : "One Way"} · ${status}</div></div>`;
   }).join("") || '<p>No patients in this folder.</p>';
 }
 
