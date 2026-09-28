@@ -209,6 +209,8 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
     private var generation = UUID()
     private var lastSent = Date.distantPast
     private var lastAcknowledged = Date.distantPast
+    private var lastGPSFix = Date.distantPast
+    private var lastRecoveryAttempt = Date.distantPast
     private var maintenance: Timer?
     private var deleting = false
     private let pendingKey: [String: Any] = [
@@ -265,6 +267,8 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
         active = true
         lastSent = .distantPast
         lastAcknowledged = .distantPast
+        lastGPSFix = Date()
+        lastRecoveryAttempt = .distantPast
         refresh()
     }
 
@@ -322,6 +326,8 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
         manager.allowsBackgroundLocationUpdates = false
         token = nil
         lastAcknowledged = .distantPast
+        lastGPSFix = .distantPast
+        lastRecoveryAttempt = .distantPast
         report(false, "Checked out · GPS stopped")
         retryCheckout()
     }
@@ -335,14 +341,20 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
               Date().timeIntervalSince(lastSent) >= 10,
               let current = locations.last, current.horizontalAccuracy >= 0,
               abs(current.timestamp.timeIntervalSinceNow) < 30 else { return }
+        lastGPSFix = current.timestamp
         send(current)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        if active {
-            lastAcknowledged = .distantPast
+        if active && Date().timeIntervalSince(lastAcknowledged) >= 60 {
             report(false, "Location unavailable · waiting for GPS or permission")
         }
+    }
+
+    func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
+        guard active else { return }
+        report(false, "GPS paused · restarting location updates")
+        recoverStalledGPS()
     }
 
     private func maintain() {
@@ -352,7 +364,20 @@ final class DriverLocationService: NSObject, ObservableObject, CLLocationManager
         if let baseURL, let token { notifications.poll(server: baseURL, token: token) }
         if manager.authorizationStatus == .authorizedAlways && manager.accuracyAuthorization == .fullAccuracy && Date().timeIntervalSince(lastAcknowledged) >= 60 {
             report(false, "Location required · no recent update delivered")
+            if Date().timeIntervalSince(lastGPSFix) >= 90 { recoverStalledGPS() }
         }
+    }
+
+    private func recoverStalledGPS() {
+        guard active, Date() < expiresAt,
+              manager.authorizationStatus == .authorizedAlways,
+              manager.accuracyAuthorization == .fullAccuracy,
+              Date().timeIntervalSince(lastRecoveryAttempt) >= 120 else { return }
+        lastRecoveryAttempt = Date()
+        // A background timer is not guaranteed to run; this also handles Core Location pause callbacks.
+        manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = true
+        manager.startUpdatingLocation()
     }
 
     private func send(_ position: CLLocation) {
