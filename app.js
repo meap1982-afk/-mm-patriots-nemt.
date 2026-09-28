@@ -736,6 +736,39 @@ function selectTripFolder(folder) {
   tripFolder = folder;
   render();
 }
+function togglePatientList() {
+  if (session?.role !== "dispatch") return;
+  const panel = $("patientListPanel");
+  panel.hidden = !panel.hidden;
+  $("patientListButton").setAttribute("aria-expanded", String(!panel.hidden));
+  if (!panel.hidden) panel.scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function patientListRows(selectedTrips) {
+  const groups = new Map();
+  for (const trip of selectedTrips) {
+    const key = trip.group || trip.id;
+    if (!groups.has(key)) {
+      const legs = trips.filter(item => (item.group || item.id) === key);
+      const pickup = legs.find(item => item.leg === "A") || trip;
+      groups.set(key, {pickup, legs});
+    }
+  }
+  const time = trip => trip.timeType === "Will Call" || !trip.time ? "99:99" : trip.time;
+  return [...groups.values()].sort((a,b) =>
+    (a.pickup.tripDate || "9999").localeCompare(b.pickup.tripDate || "9999") ||
+    time(a.pickup).localeCompare(time(b.pickup)) ||
+    String(a.pickup.patient || "").localeCompare(String(b.pickup.patient || ""))
+  ).map(({pickup, legs}) => {
+    const rt = String(pickup.group || "").startsWith("RT-");
+    const cancelled = legs.some(leg => leg.cancelled);
+    const complete = !cancelled && legs.every(leg => Number(leg.status) === 5) &&
+      (!rt || (legs.some(leg => leg.leg === "A") && legs.some(leg => leg.leg === "B")));
+    const status = cancelled ? "Cancelled / review trip" : complete ? "Completed" : "Pending / incomplete";
+    return `<div class="patient-list-row"><div><div class="patient-list-time">${esc(time(pickup) === "99:99" ? "Will call" : pickup.time)}</div><div class="small">${esc(tripDateLabel(pickup.tripDate))}</div></div><div class="patient-list-name">${esc(pickup.patient)}</div><div class="patient-list-status"><span aria-hidden="true" class="patient-dot ${cancelled ? "cancelled" : complete ? "complete" : ""}"></span>${rt ? "R/T" : "One Way"} · ${status}</div></div>`;
+  }).join("") || '<p>No patients in this folder.</p>';
+}
+
 function render() {
   updateTripFormVisibility();
   if (session?.role === "driver") {
@@ -756,6 +789,7 @@ function render() {
   const olderActive = trips.filter(trip => !trip.cancelled && Number(trip.status) >= 1 && Number(trip.status) < 5 && ["past", "undated"].includes(folderForTrip(trip, day)));
   $("olderActiveTrips").innerHTML = olderActive.length ? `<div class="step current">${olderActive.length} unfinished trip(s) in Past Trips / Date Not Set. Complete or ask Dispatch to cancel them before accepting another trip.</div>` : "";
   const scheduledTrips = trips.filter(trip => matchesFolder(trip, tripFolder)).sort(compareTripSchedule);
+  if ($("patientListRows")) $("patientListRows").innerHTML = patientListRows(scheduledTrips);
   const pendingReturns = scheduledTrips.filter(isPendingReturn);
   const dispatchedTrips = scheduledTrips.filter((trip) => !isPendingReturn(trip));
   $("pendingReturnTrips").innerHTML = pendingReturns.length ? pendingReturns.map((trip) => tripCard(trip, "dispatch")).join("") : `<div class="card">No pending returns.</div>`;
